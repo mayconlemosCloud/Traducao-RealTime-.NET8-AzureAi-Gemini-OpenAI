@@ -1,0 +1,30 @@
+## Arquivos do C#
+bin/
+obj/
+.vs/
+*.csproj.user
+*.sln.user
+
+## Arquivos do VS Code
+.vscode/
+*.code-workspace
+
+## Arquivos do build
+*.dll
+*.exe
+*.pdb
+
+## Arquivos temporários
+*.tmp
+*.log
+*~
+
+## Arquivos de sistema
+.DS_Store
+Thumbs.db
+## Arquivos de segurança (NÃO commitar!)
+.env
+.env.local
+*.key
+appsettings.local.json
+secrets.json

@@ -1,0 +1,30 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RealtimeVoice", "RealtimeVoice\RealtimeVoice.csproj", "{79F061EF-67F8-8195-6D5F-9E8A840E234D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MeetingTranslator", "MeetingTranslator\MeetingTranslator.csproj", "{45F69500-5259-4355-80D3-788BD2DA0F2C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{79F061EF-67F8-8195-6D5F-9E8A840E234D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{79F061EF-67F8-8195-6D5F-9E8A840E234D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{79F061EF-67F8-8195-6D5F-9E8A840E234D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{79F061EF-67F8-8195-6D5F-9E8A840E234D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45F69500-5259-4355-80D3-788BD2DA0F2C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45F69500-5259-4355-80D3-788BD2DA0F2C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45F69500-5259-4355-80D3-788BD2DA0F2C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45F69500-5259-4355-80D3-788BD2DA0F2C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {ACD7FAB3-7389-4291-8524-A0AA7D55986B}
+	EndGlobalSection
+EndGlobal
