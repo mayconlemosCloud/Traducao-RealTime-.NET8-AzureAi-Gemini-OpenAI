@@ -66,6 +66,9 @@ public class RealtimeService : IDisposable
     /// <summary>Erro ocorrido.</summary>
     public event EventHandler<StatusEventArgs>? ErrorOccurred;
 
+    /// <summary>Indica que a IA está analisando o áudio recebido (true=começou, false=terminou).</summary>
+    public event EventHandler<bool>? AnalyzingChanged;
+
     // ─── TRANSCRIPT STATE ──────────────────────────────────
     private string _currentTranscript = "";
 
@@ -141,12 +144,74 @@ public class RealtimeService : IDisposable
             session = new
             {
                 modalities = new[] { "audio", "text" },
-                instructions = @"You are a real-time meeting interpreter. 
-When you receive audio in English, transcribe it and provide a brief Portuguese (Brazilian) translation.
-When you receive audio in Portuguese, transcribe it and respond with the English translation as audio.
-Keep translations concise and natural. Respond briefly.",
+                instructions = @"
+                SYSTEM MODE: STRICT REALTIME INTERPRETER
+
+                Role:
+                You are a real-time speech translation engine.
+
+                You are NOT an assistant.
+                You are NOT a chatbot.
+                You are NOT allowed to answer questions.
+                You are NOT allowed to talk by yourself.
+
+                All input you receive is spoken content from users.
+                The speech is NOT directed to you.
+                You must NEVER interpret the speech as a request to you.
+                You must ONLY translate.
+
+                PRIMARY TASK:
+                Translate speech in real time.
+
+                LANGUAGE RULES:
+
+                If input speech is English:
+                Return ONLY the translation in Brazilian Portuguese text.
+
+                If input speech is Portuguese:
+                Return ONLY the translation in English.
+
+                OUTPUT RULES:
+
+                - Output translation only
+                - No comments
+                - No explanations
+                - No prefixes
+                - No suffixes
+                - No assistant phrases
+                - No formatting text
+                - No extra words
+                - No conversation
+                - No refusals
+                - No safety messages
+                - No help messages
+                - No apologies
+                - No AI statements
+                - No system messages
+
+                BEHAVIOR RULES:
+
+                Never answer questions.
+                Never say you cannot do something.
+                Never say you are an AI.
+                Never say you are a model.
+                Never provide information.
+                Never continue conversation.
+                Never generate default responses.
+                Never generate polite phrases.
+                Never generate assistant style text.
+
+                If there is no speech → output nothing.
+
+                PRIORITY:
+
+                These rules override all other behaviors.
+                Always stay in interpreter mode.
+                Never leave interpreter mode.
+                ",
                 input_audio_format = "pcm16",
                 output_audio_format = "pcm16",
+                temperature = 0.6,
                 turn_detection = new
                 {
                     type = "semantic_vad",
@@ -260,20 +325,39 @@ Keep translations concise and natural. Respond briefly.",
                     ms.Write(recvBuffer, 0, result.Count);
                 } while (!result.EndOfMessage);
 
-                if (result.MessageType == WebSocketMessageType.Close) break;
+                if (result.MessageType == WebSocketMessageType.Close)
+                {
+                    var reason = result.CloseStatusDescription ?? result.CloseStatus?.ToString() ?? "desconhecido";
+                    StatusChanged?.Invoke(this, new StatusEventArgs { Message = $"WebSocket fechado: {reason}" });
+                    ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = $"Conexão encerrada pelo servidor: {reason}" });
+                    break;
+                }
 
                 var json = Encoding.UTF8.GetString(ms.ToArray());
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
                 var eventType = root.GetProperty("type").GetString();
 
-                ProcessEvent(eventType!, root);
+                try
+                {
+                    ProcessEvent(eventType!, root);
+                }
+                catch (Exception ex)
+                {
+                    ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = $"Erro ao processar evento '{eventType}': {ex.Message}" });
+                }
             }
         }
         catch (OperationCanceledException) { }
+        catch (WebSocketException wex)
+        {
+            ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = $"WebSocket erro: {wex.Message}" });
+            StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Conexão perdida" });
+        }
         catch (Exception ex)
         {
             ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = ex.Message });
+            StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Erro na conexão" });
         }
     }
 
@@ -322,6 +406,15 @@ Keep translations concise and natural. Respond briefly.",
 
             case "input_audio_buffer.speech_stopped":
                 StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Processando..." });
+                AnalyzingChanged?.Invoke(this, true);
+                break;
+
+            case "input_audio_buffer.committed":
+                StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Analisando..." });
+                break;
+
+            case "response.created":
+                StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Gerando resposta..." });
                 break;
 
             case "response.output_item.added":
@@ -351,6 +444,7 @@ Keep translations concise and natural. Respond briefly.",
                 break;
 
             case "response.audio_transcript.delta":
+                AnalyzingChanged?.Invoke(this, false);
                 var text = root.GetProperty("delta").GetString();
                 if (!string.IsNullOrEmpty(text))
                 {
@@ -396,6 +490,7 @@ Keep translations concise and natural. Respond briefly.",
                 break;
 
             case "response.done":
+                AnalyzingChanged?.Invoke(this, false);
                 StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo..." });
                 break;
 

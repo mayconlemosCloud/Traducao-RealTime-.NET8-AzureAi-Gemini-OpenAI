@@ -1,6 +1,8 @@
 ﻿using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Animation;
 using MeetingTranslator.ViewModels;
 
 namespace MeetingTranslator;
@@ -8,6 +10,7 @@ namespace MeetingTranslator;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
+    private Storyboard? _pulseStoryboard;
 
     public MainWindow()
     {
@@ -27,6 +30,26 @@ public partial class MainWindow : Window
                 }
             }
         };
+
+        // Wire up analyzing animation
+        _vm.PropertyChanged += OnViewModelPropertyChanged;
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsAnalyzing))
+        {
+            if (_vm.IsAnalyzing)
+            {
+                _pulseStoryboard = (Storyboard)FindResource("PulseAnimation");
+                Storyboard.SetTarget(_pulseStoryboard, AnalyzingLabel);
+                _pulseStoryboard.Begin();
+            }
+            else
+            {
+                _pulseStoryboard?.Stop();
+            }
+        }
     }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

@@ -98,6 +98,13 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         set { _isAssistantTyping = value; OnPropertyChanged(); }
     }
 
+    private bool _isAnalyzing;
+    public bool IsAnalyzing
+    {
+        get => _isAnalyzing;
+        set { _isAnalyzing = value; OnPropertyChanged(); }
+    }
+
     private string _inputText = "";
     public string InputText
     {
@@ -179,6 +186,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         _service.TranscriptReceived += OnTranscriptReceived;
         _service.StatusChanged += OnStatusChanged;
         _service.ErrorOccurred += OnError;
+        _service.AnalyzingChanged += OnAnalyzingChanged;
 
         try
         {
@@ -265,6 +273,8 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
         _dispatcher.Invoke(() =>
         {
+            IsAnalyzing = false; // got transcript, no longer analyzing
+
             if (e.IsPartial)
             {
                 IsAssistantTyping = true;
@@ -294,6 +304,18 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
+    private void OnAnalyzingChanged(object? sender, bool isAnalyzing)
+    {
+        _dispatcher.Invoke(() =>
+        {
+            IsAnalyzing = isAnalyzing;
+            if (isAnalyzing)
+            {
+                SubtitleText = "🔄 Analisando...";
+            }
+        });
+    }
+
     private void OnStatusChanged(object? sender, StatusEventArgs e)
     {
         _dispatcher.Invoke(() => StatusText = e.Message);
@@ -301,7 +323,18 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void OnError(object? sender, StatusEventArgs e)
     {
-        _dispatcher.Invoke(() => SubtitleText = $"⚠ {e.Message}");
+        try
+        {
+            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "error.log");
+            File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {e.Message}{Environment.NewLine}");
+        }
+        catch { }
+
+        _dispatcher.Invoke(() =>
+        {
+            IsAnalyzing = false;
+            SubtitleText = $"⚠ {e.Message}";
+        });
     }
 
     // ─── INotifyPropertyChanged ────────────────────────────

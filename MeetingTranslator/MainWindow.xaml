@@ -21,6 +21,13 @@
         <!-- Converters -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
+        <!-- Pulsing animation for analyzing indicator -->
+        <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever">
+            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                             From="1.0" To="0.3" Duration="0:0:0.8"
+                             AutoReverse="True"/>
+        </Storyboard>
+
         <!-- Dark semi-transparent background -->
         <SolidColorBrush x:Key="BarBg"
                 Color="#CC1A1A2E"/>
@@ -191,10 +198,25 @@
                                         <Setter Property="Fill"
                                                 Value="#FF00CC66"/>
                                     </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsAnalyzing}"
+                                            Value="True">
+                                        <Setter Property="Fill"
+                                                Value="#FFFFAA00"/>
+                                    </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
+                    <!-- Analyzing label (pulsing) -->
+                    <TextBlock x:Name="AnalyzingLabel"
+                               Text="🔄 Analisando..."
+                               Foreground="#FFFFAA00"
+                               FontSize="10"
+                               FontFamily="Segoe UI"
+                               FontWeight="SemiBold"
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center"
+                               Visibility="{Binding IsAnalyzing, Converter={StaticResource BoolToVis}}"/>
                     <TextBlock Text="{Binding StatusText}"
                             Foreground="{StaticResource TextSecondary}"
                                FontSize="10"
