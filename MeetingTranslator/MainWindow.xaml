@@ -23,11 +23,11 @@
 
         <!-- Pulsing animation for analyzing indicator -->
         <Storyboard x:Key="PulseAnimation"
-                RepeatBehavior="Forever">
+                    RepeatBehavior="Forever">
             <DoubleAnimation Storyboard.TargetProperty="Opacity"
                              From="1.0"
-                    To="0.3"
-                    Duration="0:0:0.8"
+                             To="0.3"
+                             Duration="0:0:0.8"
                              AutoReverse="True"/>
         </Storyboard>
 
