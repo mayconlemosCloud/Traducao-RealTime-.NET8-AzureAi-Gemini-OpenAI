@@ -53,14 +53,30 @@ public class RealtimeService : IDisposable
     private string _currentItemId = "";
     private long _playedAudioBytes;
 
-    // ─── CLIENT-SIDE SILENCE DETECTION ─────────────────────
+    // ─── RESPONSE QUEUE (full-duplex) ──────────────────────
+    // Garante que responses sejam processadas sequencialmente.
+    // Se o usuário fala enquanto a IA responde, o commit é feito
+    // mas o response.create é enfileirado para depois.
+    private bool _responseInProgress;
+    private int _pendingResponseCount;
+    private readonly object _responseLock = new();
+
+    // ─── CLIENT-SIDE VAD (Voice Activity Detection) ─────────
     // Com turn_detection=null, precisamos detectar silêncio localmente
     // e fazer commit manual do buffer de áudio.
+    //
+    // NOTA: O Echo Gate foi REMOVIDO. Com fones de ouvido não há eco
+    // mic→speaker. O Loopback Gate (bloqueia loopback durante playback)
+    // já previne o feedback loop principal. O echo gate 3x estava
+    // filtrando fala real do usuário durante playback (~500 RMS < 900 threshold).
     private DateTime _lastVoiceActivity = DateTime.UtcNow;
+    private DateTime _firstVoiceActivity = DateTime.UtcNow;
     private bool _hasUncommittedAudio;
+    private bool _voiceDetectedDuringPlayback; // rastreia se usuário falou enquanto IA respondia
     private Timer? _silenceTimer;
-    private const double SilenceThresholdSeconds = 2.0; // segundos de silêncio para commit
-    private const float VoiceEnergyThreshold = 300f;    // RMS threshold para detectar voz
+    private const double SilenceThresholdSeconds = 1.8;   // segundos de silêncio para commit
+    private const float VoiceEnergyThreshold = 300f;      // RMS threshold para detectar voz
+    private const double MinVoiceDurationSeconds = 0.3;   // mínimo de fala contínua para considerar válido (filtra ruídos curtos)
 
     private readonly string _apiKey;
     private readonly WaveFormat _waveFormat = new(SampleRate, BitsPerSample, Channels);
@@ -258,16 +274,27 @@ public class RealtimeService : IDisposable
             {
                 if (_ws.State != WebSocketState.Open) return;
 
-                // Sempre envia áudio — full-duplex, mic nunca é mutado
+                // Sempre envia áudio do mic — full-duplex, mic nunca é mutado.
+                // Mesmo durante playback, o mic continua enviando.
+                // O áudio fica no buffer do servidor para o próximo commit.
                 var base64 = Convert.ToBase64String(e.Buffer, 0, e.BytesRecorded);
                 QueueSend(new { type = "input_audio_buffer.append", audio = base64 });
 
-                // Detecção de energia para saber se há voz (client-side VAD)
+                // VAD: detecta voz usando threshold fixo.
+                // SEM echo gate — o Loopback Gate já bloqueia o feedback loop.
+                // Com fones, não há vazamento speaker→mic.
                 float rms = CalculateRms(e.Buffer, e.BytesRecorded);
                 if (rms > VoiceEnergyThreshold)
                 {
+                    if (!_hasUncommittedAudio)
+                        _firstVoiceActivity = DateTime.UtcNow;
+
                     _lastVoiceActivity = DateTime.UtcNow;
                     _hasUncommittedAudio = true;
+
+                    // Marca que o usuário falou durante o playback da IA
+                    if (_isPlaying)
+                        _voiceDetectedDuringPlayback = true;
                 }
             };
 
@@ -307,6 +334,19 @@ public class RealtimeService : IDisposable
             if (_ws?.State != WebSocketState.Open) return;
             if (e.BytesRecorded == 0) return;
 
+            // ╔══════════════════════════════════════════════════════════╗
+            // ║ LOOPBACK GATE: Bloqueia durante playback da IA          ║
+            // ║                                                          ║
+            // ║ WasapiLoopbackCapture captura TUDO que sai do sistema,   ║
+            // ║ incluindo o áudio que _waveOut está tocando.              ║
+            // ║ Sem este gate, a IA ouve sua própria tradução via        ║
+            // ║ loopback → traduz de volta → loop infinito.              ║
+            // ║                                                          ║
+            // ║ Durante playback, o loopback é silenciado. O mic         ║
+            // ║ continua aberto (full-duplex real para o usuário).       ║
+            // ╚══════════════════════════════════════════════════════════╝
+            if (_isPlaying) return;
+
             // Convert loopback audio to 24kHz mono PCM16
             byte[] converted = ConvertAudioFormat(e.Buffer, e.BytesRecorded, loopbackFormat, _waveFormat);
             if (converted.Length == 0) return;
@@ -318,6 +358,9 @@ public class RealtimeService : IDisposable
             float rms = CalculateRms(converted, converted.Length);
             if (rms > VoiceEnergyThreshold)
             {
+                if (!_hasUncommittedAudio)
+                    _firstVoiceActivity = DateTime.UtcNow;
+
                 _lastVoiceActivity = DateTime.UtcNow;
                 _hasUncommittedAudio = true;
             }
@@ -511,13 +554,42 @@ public class RealtimeService : IDisposable
 
                     _isPlaying = false;
                     _playedAudioBytes = 0;
-                    StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo..." });
+
+                    // NÃO muda status aqui — response.done fará isso
+                    // com lógica condicional (verifica se user falou durante playback)
                 }, _cts!.Token);
                 break;
 
             case "response.done":
                 AnalyzingChanged?.Invoke(this, false);
-                StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo..." });
+                // Verifica se há responses na fila e dispara a próxima
+                ProcessNextQueuedResponse();
+                // Se não há mais pendentes, gerencia buffer
+                lock (_responseLock)
+                {
+                    if (!_responseInProgress)
+                    {
+                        if (_hasUncommittedAudio || _voiceDetectedDuringPlayback)
+                        {
+                            // ╔════════════════════════════════════════════════════╗
+                            // ║ USUÁRIO FALOU DURANTE PLAYBACK            ║
+                            // ║                                            ║
+                            // ║ NÃO limpar buffer! O áudio do usuário    ║
+                            // ║ está lá e será commitado pelo timer de   ║
+                            // ║ silêncio quando ele parar de falar.       ║
+                            // ╚════════════════════════════════════════════════════╝
+                            _voiceDetectedDuringPlayback = false;
+                            StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo fala..." });
+                        }
+                        else
+                        {
+                            // Ninguém falou durante playback — limpa ruído/silêncio acumulado
+                            QueueSend(new { type = "input_audio_buffer.clear" });
+                            _hasUncommittedAudio = false;
+                            StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo..." });
+                        }
+                    }
+                }
                 break;
 
             case "error":
@@ -554,8 +626,15 @@ public class RealtimeService : IDisposable
     }
 
     /// <summary>
-    /// Verificado periodicamente pelo timer. Quando detecta silêncio prolongado
-    /// após atividade de voz, faz commit do buffer e solicita resposta.
+    /// Verificado periodicamente pelo timer. Detecta silêncio prolongado
+    /// após atividade de voz e faz commit + response.create (ou enfileira).
+    /// 
+    /// REGRAS:
+    /// 1. Só comita quando há silêncio >= SilenceThresholdSeconds
+    /// 2. Ignora ruídos curtos (&lt; MinVoiceDurationSeconds) 
+    /// 3. Se response em andamento, enfileira (queue)
+    /// 4. Se IA está tocando áudio, AINDA assim comita (a fala do user
+    ///    é real e será processada quando a response atual terminar)
     /// </summary>
     private void CheckSilenceAndCommit()
     {
@@ -567,14 +646,64 @@ public class RealtimeService : IDisposable
         {
             _hasUncommittedAudio = false;
 
+            // Filtro de duração mínima: ignora ruídos/cliques curtos
+            var voiceDuration = (_lastVoiceActivity - _firstVoiceActivity).TotalSeconds;
+            if (voiceDuration < MinVoiceDurationSeconds)
+            {
+                // Áudio muito curto — provavelmente ruído.
+                // NÃO limpar buffer se playback está ativo ou se houve voz durante playback.
+                // O ruído está misturado com possível fala real que veio antes.
+                if (!_isPlaying && !_voiceDetectedDuringPlayback)
+                {
+                    QueueSend(new { type = "input_audio_buffer.clear" });
+                }
+                return;
+            }
+
             // Commit manual do buffer de áudio
             QueueSend(new { type = "input_audio_buffer.commit" });
+            _voiceDetectedDuringPlayback = false; // reset: a fala foi commitada
 
-            // Solicitar geração de resposta
-            QueueSend(new { type = "response.create" });
+            lock (_responseLock)
+            {
+                if (!_responseInProgress)
+                {
+                    // Nenhuma response em andamento — solicitar imediatamente
+                    _responseInProgress = true;
+                    QueueSend(new { type = "response.create" });
+                    AnalyzingChanged?.Invoke(this, true);
+                    StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Processando..." });
+                }
+                else
+                {
+                    // Response em andamento — enfileirar para depois
+                    _pendingResponseCount++;
+                    StatusChanged?.Invoke(this, new StatusEventArgs { Message = $"Enfileirado ({_pendingResponseCount} pendente{(_pendingResponseCount > 1 ? "s" : "")})" });
+                }
+            }
+        }
+    }
 
-            AnalyzingChanged?.Invoke(this, true);
-            StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Processando..." });
+    /// <summary>
+    /// Chamado quando response.done é recebido. Verifica se há responses
+    /// pendentes na fila e dispara a próxima.
+    /// </summary>
+    private void ProcessNextQueuedResponse()
+    {
+        lock (_responseLock)
+        {
+            if (_pendingResponseCount > 0)
+            {
+                _pendingResponseCount--;
+                // _responseInProgress continua true
+                QueueSend(new { type = "response.create" });
+                AnalyzingChanged?.Invoke(this, true);
+                StatusChanged?.Invoke(this, new StatusEventArgs { Message = $"Processando próximo... ({_pendingResponseCount} restante{(_pendingResponseCount > 1 ? "s" : "")})" });
+            }
+            else
+            {
+                _responseInProgress = false;
+            }
         }
     }
     // ─── STOP / DISPOSE ────────────────────────────────────
