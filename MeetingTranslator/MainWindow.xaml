@@ -22,36 +22,39 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
         <!-- Pulsing animation for analyzing indicator -->
-        <Storyboard x:Key="PulseAnimation" RepeatBehavior="Forever">
+        <Storyboard x:Key="PulseAnimation"
+                RepeatBehavior="Forever">
             <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                             From="1.0" To="0.3" Duration="0:0:0.8"
+                             From="1.0"
+                    To="0.3"
+                    Duration="0:0:0.8"
                              AutoReverse="True"/>
         </Storyboard>
 
         <!-- Dark semi-transparent background -->
         <SolidColorBrush x:Key="BarBg"
-                Color="#CC1A1A2E"/>
+                         Color="#CC1A1A2E"/>
         <SolidColorBrush x:Key="BarBgSolid"
-                Color="#FF1A1A2E"/>
+                         Color="#FF1A1A2E"/>
         <SolidColorBrush x:Key="AccentBlue"
-                Color="#FF4A9EFF"/>
+                         Color="#FF4A9EFF"/>
         <SolidColorBrush x:Key="AccentGreen"
-                Color="#FF4AFF8A"/>
+                         Color="#FF4AFF8A"/>
         <SolidColorBrush x:Key="TextPrimary"
-                Color="#FFFFFFFF"/>
+                         Color="#FFFFFFFF"/>
         <SolidColorBrush x:Key="TextSecondary"
-                Color="#99FFFFFF"/>
+                         Color="#99FFFFFF"/>
         <SolidColorBrush x:Key="ButtonHover"
-                Color="#33FFFFFF"/>
+                         Color="#33FFFFFF"/>
 
         <SolidColorBrush x:Key="ChatAssistantBubble"
-                Color="#33FFFFFF"/>
+                         Color="#33FFFFFF"/>
         <SolidColorBrush x:Key="ChatUserBubble"
-                Color="#FF4A9EFF"/>
+                         Color="#FF4A9EFF"/>
 
         <!-- Minimal button style -->
         <Style x:Key="BarButton"
-                TargetType="Button">
+               TargetType="Button">
             <Setter Property="Background"
                     Value="Transparent"/>
             <Setter Property="Foreground"
@@ -72,11 +75,11 @@
                                 CornerRadius="4"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"/>
+                                              VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver"
-                                    Value="True">
+                                     Value="True">
                                 <Setter TargetName="bd"
                                         Property="Background"
                                         Value="{StaticResource ButtonHover}"/>
@@ -170,7 +173,7 @@
 
             <!-- ═══ ROW 0: SUBTITLE BAR ═══ -->
             <Grid Grid.Row="0"
-                    MinHeight="48">
+                  MinHeight="48">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <!-- Status dot -->
@@ -182,24 +185,24 @@
 
                 <!-- Status indicator -->
                 <StackPanel Grid.Column="0"
-                        Orientation="Horizontal"
-                        Margin="12,0,8,0"
-                        VerticalAlignment="Center">
+                            Orientation="Horizontal"
+                            Margin="12,0,8,0"
+                            VerticalAlignment="Center">
                     <Ellipse Width="8"
-                            Height="8"
-                            x:Name="StatusDot">
+                             Height="8"
+                             x:Name="StatusDot">
                         <Ellipse.Style>
                             <Style TargetType="Ellipse">
                                 <Setter Property="Fill"
                                         Value="#FF555555"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsConnected}"
-                                            Value="True">
+                                                 Value="True">
                                         <Setter Property="Fill"
                                                 Value="#FF00CC66"/>
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding IsAnalyzing}"
-                                            Value="True">
+                                                 Value="True">
                                         <Setter Property="Fill"
                                                 Value="#FFFFAA00"/>
                                     </DataTrigger>
@@ -218,30 +221,30 @@
                                VerticalAlignment="Center"
                                Visibility="{Binding IsAnalyzing, Converter={StaticResource BoolToVis}}"/>
                     <TextBlock Text="{Binding StatusText}"
-                            Foreground="{StaticResource TextSecondary}"
+                               Foreground="{StaticResource TextSecondary}"
                                FontSize="10"
-                            Margin="6,0,0,0"
-                            VerticalAlignment="Center"
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center"
                                FontFamily="Segoe UI"/>
                 </StackPanel>
 
                 <!-- Subtitle text -->
                 <TextBlock Grid.Column="1"
-                        Text="{Binding SubtitleText}"
+                           Text="{Binding SubtitleText}"
                            Foreground="{StaticResource TextPrimary}"
                            FontSize="16"
-                        FontFamily="Segoe UI"
-                        FontWeight="SemiBold"
+                           FontFamily="Segoe UI"
+                           FontWeight="SemiBold"
                            TextWrapping="Wrap"
-                        VerticalAlignment="Center"
+                           VerticalAlignment="Center"
                            Padding="4,10"
-                        TextAlignment="Left"/>
+                           TextAlignment="Left"/>
 
                 <!-- Action buttons -->
                 <StackPanel Grid.Column="2"
-                        Orientation="Horizontal"
-                        Margin="4,0,8,0"
-                        VerticalAlignment="Center">
+                            Orientation="Horizontal"
+                            Margin="4,0,8,0"
+                            VerticalAlignment="Center">
                     <!-- History toggle -->
                     <Button Style="{StaticResource BarButton}"
                             Content="▼"
@@ -268,7 +271,7 @@
                                                 Value="⚡"/>
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsConnected}"
-                                                    Value="True">
+                                                         Value="True">
                                                 <Setter Property="Text"
                                                         Value="⏹"/>
                                             </DataTrigger>
@@ -303,11 +306,11 @@
                     BorderThickness="0,1,0,0">
                 <StackPanel>
                     <TextBlock Text="C O N F I G U R A Ç Õ E S   D E   Á U D I O"
-                            Foreground="{StaticResource AccentBlue}"
+                               Foreground="{StaticResource AccentBlue}"
                                FontSize="10"
-                            FontWeight="Bold"
-                            FontFamily="Segoe UI"
-                            Margin="0,0,0,8"/>
+                               FontWeight="Bold"
+                               FontFamily="Segoe UI"
+                               Margin="0,0,0,8"/>
 
                     <!-- Mic device -->
                     <Grid Margin="0,0,0,6">
@@ -317,21 +320,21 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0"
-                                IsChecked="{Binding UseMic}"
-                                VerticalAlignment="Center"
+                                  IsChecked="{Binding UseMic}"
+                                  VerticalAlignment="Center"
                                   Foreground="{StaticResource TextPrimary}"
-                                Margin="0,0,8,0"/>
+                                  Margin="0,0,8,0"/>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="🎤 Meu Microfone (sua voz → traduz PT→EN)"
                                        Foreground="{StaticResource TextPrimary}"
-                                    FontSize="12"
-                                    FontFamily="Segoe UI"/>
+                                       FontSize="12"
+                                       FontFamily="Segoe UI"/>
                             <ComboBox ItemsSource="{Binding MicDevices}"
                                       SelectedItem="{Binding SelectedMicDevice}"
                                       FontSize="11"
-                                    Margin="0,4,0,0"
-                                    MaxWidth="400"
-                                    HorizontalAlignment="Left"/>
+                                      Margin="0,4,0,0"
+                                      MaxWidth="400"
+                                      HorizontalAlignment="Left"/>
                         </StackPanel>
                     </Grid>
 
@@ -343,21 +346,21 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <CheckBox Grid.Column="0"
-                                IsChecked="{Binding UseLoopback}"
-                                VerticalAlignment="Center"
+                                  IsChecked="{Binding UseLoopback}"
+                                  VerticalAlignment="Center"
                                   Foreground="{StaticResource TextPrimary}"
-                                Margin="0,0,8,0"/>
+                                  Margin="0,0,8,0"/>
                         <StackPanel Grid.Column="1">
                             <TextBlock Text="🔊 Áudio do Sistema (Meet/Teams → traduz EN→PT)"
                                        Foreground="{StaticResource TextPrimary}"
-                                    FontSize="12"
-                                    FontFamily="Segoe UI"/>
+                                       FontSize="12"
+                                       FontFamily="Segoe UI"/>
                             <ComboBox ItemsSource="{Binding LoopbackDevices}"
                                       SelectedItem="{Binding SelectedLoopbackDevice}"
                                       FontSize="11"
-                                    Margin="0,4,0,0"
-                                    MaxWidth="400"
-                                    HorizontalAlignment="Left"/>
+                                      Margin="0,4,0,0"
+                                      MaxWidth="400"
+                                      HorizontalAlignment="Left"/>
                         </StackPanel>
                     </Grid>
 
@@ -388,12 +391,12 @@
 
                     <!-- Header -->
                     <Grid Grid.Row="0"
-                            Margin="14,8,14,4">
+                          Margin="14,8,14,4">
                         <TextBlock Text="HISTÓRICO DA CONVERSA"
-                                Foreground="{StaticResource AccentBlue}"
+                                   Foreground="{StaticResource AccentBlue}"
                                    FontSize="10"
-                                FontWeight="Bold"
-                                FontFamily="Segoe UI"
+                                   FontWeight="Bold"
+                                   FontFamily="Segoe UI"
                                    VerticalAlignment="Center"/>
                         <Button Style="{StaticResource BarButton}"
                                 Content="▲ Esconder"
@@ -405,10 +408,10 @@
 
                     <!-- Conversation list -->
                     <ListBox Grid.Row="1"
-                            ItemsSource="{Binding History}"
+                             ItemsSource="{Binding History}"
                              ItemTemplate="{StaticResource HistoryItemTemplate}"
                              Background="Transparent"
-                            BorderThickness="0"
+                             BorderThickness="0"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              x:Name="HistoryList"
                              VirtualizingPanel.ScrollUnit="Pixel">
@@ -435,21 +438,21 @@
 
                     <!-- Empty state -->
                     <TextBlock Grid.Row="1"
-                            Text="Nenhuma conversa ainda..."
+                               Text="Nenhuma conversa ainda..."
                                Foreground="{StaticResource TextSecondary}"
-                            FontSize="12"
+                               FontSize="12"
                                HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Margin="0,20"
+                               VerticalAlignment="Center"
+                               Margin="0,20"
                                FontFamily="Segoe UI"
-                            FontStyle="Italic">
+                               FontStyle="Italic">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Visibility"
                                         Value="Collapsed"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding History.Count}"
-                                            Value="0">
+                                                 Value="0">
                                         <Setter Property="Visibility"
                                                 Value="Visible"/>
                                     </DataTrigger>
