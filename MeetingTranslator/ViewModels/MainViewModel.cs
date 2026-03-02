@@ -1,8 +1,10 @@
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Threading;
 using MeetingTranslator.Models;
 using MeetingTranslator.Services;
@@ -89,19 +91,43 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         set { _isSettingsVisible = value; OnPropertyChanged(); }
     }
 
+    private bool _isAssistantTyping;
+    public bool IsAssistantTyping
+    {
+        get => _isAssistantTyping;
+        set { _isAssistantTyping = value; OnPropertyChanged(); }
+    }
+
+    private string _inputText = "";
+    public string InputText
+    {
+        get => _inputText;
+        set
+        {
+            _inputText = value;
+            OnPropertyChanged();
+            if (SendMessageCommand is DelegateCommand cmd)
+            {
+                cmd.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
     // ─── COLLECTIONS ──────────────────────────────────────
     public ObservableCollection<AudioDeviceInfo> MicDevices { get; } = new();
     public ObservableCollection<AudioDeviceInfo> LoopbackDevices { get; } = new();
     public ObservableCollection<ConversationEntry> History { get; } = new();
 
-    // partial transcript accumulator
+    // partial transcript accumulator (texto completo atual da fala)
     private string _partialTranscript = "";
-    private ConversationEntry? _currentEntry;
+
+    public ICommand SendMessageCommand { get; }
 
     public MainViewModel()
     {
         _dispatcher = Application.Current.Dispatcher;
         LoadDevices();
+        SendMessageCommand = new DelegateCommand(_ => SendMessage(), _ => !string.IsNullOrWhiteSpace(InputText));
     }
 
     private void LoadDevices()
@@ -204,60 +230,66 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         LoadDevices();
     }
 
+    private void SendMessage()
+    {
+        var text = InputText.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        History.Add(new ConversationEntry
+        {
+            Speaker = Speaker.You,
+            TranslatedText = text
+        });
+
+        InputText = string.Empty;
+    }
+
     // ─── EVENT HANDLERS ────────────────────────────────────
     private void OnTranscriptReceived(object? sender, TranscriptEventArgs e)
     {
+        try
+        {
+            var logLine =
+                $"[{DateTime.Now:HH:mm:ss}] IsPartial={e.IsPartial}, Speaker={e.Speaker}, Text=\"{e.TranslatedText}\"{Environment.NewLine}";
+            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "transcripts.log");
+            File.AppendAllText(logPath, logLine);
+            Console.WriteLine(logLine);
+        }
+        catch
+        {
+            // logging best-effort, não pode quebrar a UI
+        }
+
         _dispatcher.Invoke(() =>
         {
             if (e.IsPartial)
             {
-                _partialTranscript += e.TranslatedText;
-                SubtitleText = _partialTranscript;
-
-                // Update or create current history entry
-                if (_currentEntry == null)
-                {
-                    _currentEntry = new ConversationEntry
-                    {
-                        Speaker = e.Speaker,
-                        TranslatedText = _partialTranscript
-                    };
-                    History.Add(_currentEntry);
-                }
-                else
-                {
-                    _currentEntry.TranslatedText = _partialTranscript;
-                    // Force UI refresh for the last item
-                    var idx = History.Count - 1;
-                    if (idx >= 0)
-                    {
-                        History[idx] = _currentEntry;
-                    }
-                }
+                IsAssistantTyping = true;
+                // Serviço já envia o texto completo acumulado; apenas espelhamos no subtítulo
+                _partialTranscript = e.TranslatedText;
+                SubtitleText = e.TranslatedText;
             }
             else
             {
                 // Final transcript
+                IsAssistantTyping = false;
+
+                // Texto final já vem completo do serviço
                 var finalText = string.IsNullOrEmpty(e.TranslatedText) ? _partialTranscript : e.TranslatedText;
+
                 SubtitleText = finalText;
 
-                if (_currentEntry != null)
+                // Apenas mensagens finais vão para o histórico (bolha única completa)
+                History.Add(new ConversationEntry
                 {
-                    _currentEntry.TranslatedText = finalText;
-                    var idx = History.Count - 1;
-                    if (idx >= 0) History[idx] = _currentEntry;
-                }
-                else
-                {
-                    History.Add(new ConversationEntry
-                    {
-                        Speaker = e.Speaker,
-                        TranslatedText = finalText
-                    });
-                }
+                    Speaker = e.Speaker,
+                    TranslatedText = finalText
+                });
 
                 _partialTranscript = "";
-                _currentEntry = null;
             }
         });
     }

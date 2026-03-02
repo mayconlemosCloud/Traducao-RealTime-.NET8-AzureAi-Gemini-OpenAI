@@ -1,4 +1,4 @@
-﻿<Window x:Class="MeetingTranslator.MainWindow"
+<Window x:Class="MeetingTranslator.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -36,6 +36,11 @@
                 Color="#99FFFFFF"/>
         <SolidColorBrush x:Key="ButtonHover"
                 Color="#33FFFFFF"/>
+
+        <SolidColorBrush x:Key="ChatAssistantBubble"
+                Color="#33FFFFFF"/>
+        <SolidColorBrush x:Key="ChatUserBubble"
+                Color="#FF4A9EFF"/>
 
         <!-- Minimal button style -->
         <Style x:Key="BarButton"
@@ -75,57 +80,69 @@
             </Setter>
         </Style>
 
-        <!-- History item template -->
+        <!-- History item template as chat bubbles -->
         <DataTemplate x:Key="HistoryItemTemplate">
-            <Border Padding="10,6"
-                    BorderBrush="#22FFFFFF"
-                    BorderThickness="0,0,0,1">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="50"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0"
-                            VerticalAlignment="Top">
-                        <TextBlock Text="{Binding TimeLabel}"
-                                Foreground="{StaticResource TextSecondary}"
-                                   FontSize="11"
-                                FontFamily="Segoe UI"/>
-                        <Ellipse Width="8"
-                                Height="8"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Center">
-                            <Ellipse.Style>
-                                <Style TargetType="Ellipse">
-                                    <Setter Property="Fill"
-                                            Value="{StaticResource AccentBlue}"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Speaker}"
-                                                Value="You">
-                                            <Setter Property="Fill"
-                                                    Value="{StaticResource AccentGreen}"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Ellipse.Style>
-                        </Ellipse>
-                    </StackPanel>
-                    <StackPanel Grid.Column="1">
+            <Grid Margin="12,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Border x:Name="Bubble"
+                        Grid.Column="0"
+                        Background="{StaticResource ChatAssistantBubble}"
+                        CornerRadius="16"
+                        Padding="12,8"
+                        MaxWidth="420">
+                    <StackPanel>
                         <TextBlock Text="{Binding TranslatedText}"
-                                Foreground="{StaticResource TextPrimary}"
+                                   Foreground="{StaticResource TextPrimary}"
                                    FontSize="13"
-                                FontFamily="Segoe UI"
-                                TextWrapping="Wrap"/>
+                                   FontFamily="Segoe UI"
+                                   TextWrapping="Wrap"/>
                         <TextBlock Text="{Binding OriginalText}"
-                                Foreground="{StaticResource TextSecondary}"
+                                   Foreground="{StaticResource TextSecondary}"
                                    FontSize="11"
-                                FontFamily="Segoe UI"
-                                TextWrapping="Wrap"
-                                Margin="0,2,0,0"
+                                   FontFamily="Segoe UI"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0"
                                    Visibility="{Binding OriginalText, Converter={StaticResource BoolToVis}}"/>
+                        <TextBlock Text="{Binding TimeLabel}"
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="10"
+                                   FontFamily="Segoe UI"
+                                   HorizontalAlignment="Right"
+                                   Margin="0,4,0,0"/>
                     </StackPanel>
-                </Grid>
-            </Border>
+                </Border>
+            </Grid>
+
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Speaker}"
+                             Value="You">
+                    <Setter TargetName="Bubble"
+                            Property="Grid.Column"
+                            Value="1"/>
+                    <Setter TargetName="Bubble"
+                            Property="HorizontalAlignment"
+                            Value="Right"/>
+                    <Setter TargetName="Bubble"
+                            Property="Background"
+                            Value="{StaticResource ChatUserBubble}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Speaker}"
+                             Value="Them">
+                    <Setter TargetName="Bubble"
+                            Property="Grid.Column"
+                            Value="0"/>
+                    <Setter TargetName="Bubble"
+                            Property="HorizontalAlignment"
+                            Value="Left"/>
+                    <Setter TargetName="Bubble"
+                            Property="Background"
+                            Value="{StaticResource ChatAssistantBubble}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
         </DataTemplate>
     </Window.Resources>
 
@@ -333,7 +350,7 @@
                 </StackPanel>
             </Border>
 
-            <!-- ═══ ROW 2: HISTORY DRAWER ═══ -->
+            <!-- ═══ ROW 2: HISTORY / CHAT DRAWER ═══ -->
             <Border Grid.Row="2"
                     Background="{StaticResource BarBgSolid}"
                     Visibility="{Binding IsHistoryVisible, Converter={StaticResource BoolToVis}}"
@@ -418,6 +435,51 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
+
+                    <!-- Typing indicator + input bar -->
+                    <Grid Grid.Row="2"
+                          Margin="12,4,12,10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Typing indicator -->
+                        <TextBlock Grid.Row="0"
+                                   Text="Assistente digitando..."
+                                   Foreground="{StaticResource TextSecondary}"
+                                   FontSize="11"
+                                   FontFamily="Segoe UI"
+                                   Margin="0,0,0,4"
+                                   Visibility="{Binding IsAssistantTyping, Converter={StaticResource BoolToVis}}"/>
+
+                        <!-- Input row -->
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Grid.Column="0"
+                                     Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
+                                     FontSize="13"
+                                     FontFamily="Segoe UI"
+                                     Margin="0,0,8,0"
+                                     Padding="8,6"
+                                     VerticalContentAlignment="Center"
+                                     Background="#22FFFFFF"
+                                     Foreground="{StaticResource TextPrimary}"
+                                     BorderBrush="#44FFFFFF"
+                                     BorderThickness="1"/>
+
+                            <Button Grid.Column="1"
+                                    Style="{StaticResource BarButton}"
+                                    Command="{Binding SendMessageCommand}"
+                                    Content="Enviar"
+                                    Padding="10,6"
+                                    Foreground="{StaticResource AccentBlue}"/>
+                        </Grid>
+                    </Grid>
                 </Grid>
             </Border>
         </Grid>

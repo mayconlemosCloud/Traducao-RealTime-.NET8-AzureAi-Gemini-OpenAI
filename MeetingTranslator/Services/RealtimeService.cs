@@ -66,6 +66,9 @@ public class RealtimeService : IDisposable
     /// <summary>Erro ocorrido.</summary>
     public event EventHandler<StatusEventArgs>? ErrorOccurred;
 
+    // ─── TRANSCRIPT STATE ──────────────────────────────────
+    private string _currentTranscript = "";
+
     public bool IsConnected => _ws?.State == WebSocketState.Open;
 
     public RealtimeService(string apiKey)
@@ -351,23 +354,32 @@ Keep translations concise and natural. Respond briefly.",
                 var text = root.GetProperty("delta").GetString();
                 if (!string.IsNullOrEmpty(text))
                 {
+                    // Acumula a transcrição atual por fala para enviar sempre o texto completo
+                    _currentTranscript += text;
+
                     TranscriptReceived?.Invoke(this, new TranscriptEventArgs
                     {
                         Speaker = Speaker.Them,
-                        TranslatedText = text,
+                        TranslatedText = _currentTranscript,
                         IsPartial = true
                     });
                 }
                 break;
 
             case "response.audio_transcript.done":
-                var finalText = root.TryGetProperty("transcript", out var t) ? t.GetString() ?? "" : "";
+                // Usa o acumulado como texto final; se por algum motivo estiver vazio, cai para o transcript bruto
+                var finalText = !string.IsNullOrEmpty(_currentTranscript)
+                    ? _currentTranscript
+                    : root.TryGetProperty("transcript", out var t) ? t.GetString() ?? "" : "";
+
                 TranscriptReceived?.Invoke(this, new TranscriptEventArgs
                 {
                     Speaker = Speaker.Them,
                     TranslatedText = finalText,
                     IsPartial = false
                 });
+
+                _currentTranscript = "";
                 break;
 
             case "response.audio.done":
