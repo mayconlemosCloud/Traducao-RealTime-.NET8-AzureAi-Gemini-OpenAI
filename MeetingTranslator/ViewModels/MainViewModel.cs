@@ -15,7 +15,8 @@ namespace MeetingTranslator.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
-    private RealtimeService? _service;
+    private RealtimeService? _voiceService;
+    private TranscriptionService? _transcriptionService;
     private readonly Dispatcher _dispatcher;
 
     // ─── BINDABLE PROPERTIES ───────────────────────────────
@@ -70,6 +71,39 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         get => _useLoopback;
         set { _useLoopback = value; OnPropertyChanged(); }
     }
+
+    private ApiMode _selectedMode = ApiMode.Transcription;
+    public ApiMode SelectedMode
+    {
+        get => _selectedMode;
+        set
+        {
+            _selectedMode = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsVoiceMode));
+            OnPropertyChanged(nameof(IsTranscriptionMode));
+            OnPropertyChanged(nameof(ModeDescription));
+        }
+    }
+
+    public bool IsVoiceMode
+    {
+        get => _selectedMode == ApiMode.Voice;
+        set { if (value) SelectedMode = ApiMode.Voice; }
+    }
+
+    public bool IsTranscriptionMode
+    {
+        get => _selectedMode == ApiMode.Transcription;
+        set { if (value) SelectedMode = ApiMode.Transcription; }
+    }
+
+    public string ModeDescription => _selectedMode switch
+    {
+        ApiMode.Voice => "IA ouve, traduz e fala. Resultado após silêncio.",
+        ApiMode.Transcription => "Texto em tempo real enquanto fala. Tradução após cada frase.",
+        _ => ""
+    };
 
     private AudioDeviceInfo? _selectedMicDevice;
     public AudioDeviceInfo? SelectedMicDevice
@@ -200,21 +234,17 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             return;
         }
 
-        _service = new RealtimeService(apiKey);
-
-        _service.TranscriptReceived += OnTranscriptReceived;
-        _service.StatusChanged += OnStatusChanged;
-        _service.ErrorOccurred += OnError;
-        _service.AnalyzingChanged += OnAnalyzingChanged;
-
         try
         {
-            await _service.StartAsync(
-                SelectedMicDevice?.DeviceIndex ?? 0,
-                SelectedLoopbackDevice?.DeviceIndex ?? 0,
-                UseMic,
-                UseLoopback
-            );
+            if (SelectedMode == ApiMode.Voice)
+            {
+                await ConnectVoiceModeAsync(apiKey);
+            }
+            else
+            {
+                await ConnectTranscriptionModeAsync(apiKey);
+            }
+
             IsConnected = true;
             SubtitleText = "Pronto — ouvindo...";
         }
@@ -224,20 +254,66 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    private async Task ConnectVoiceModeAsync(string apiKey)
+    {
+        _voiceService = new RealtimeService(apiKey);
+
+        _voiceService.TranscriptReceived += OnTranscriptReceived;
+        _voiceService.StatusChanged += OnStatusChanged;
+        _voiceService.ErrorOccurred += OnError;
+        _voiceService.AnalyzingChanged += OnAnalyzingChanged;
+
+        await _voiceService.StartAsync(
+            SelectedMicDevice?.DeviceIndex ?? 0,
+            SelectedLoopbackDevice?.DeviceIndex ?? 0,
+            UseMic,
+            UseLoopback
+        );
+    }
+
+    private async Task ConnectTranscriptionModeAsync(string apiKey)
+    {
+        _transcriptionService = new TranscriptionService(apiKey);
+
+        _transcriptionService.TranscriptReceived += OnTranscriptReceived;
+        _transcriptionService.StatusChanged += OnStatusChanged;
+        _transcriptionService.ErrorOccurred += OnError;
+        _transcriptionService.AnalyzingChanged += OnAnalyzingChanged;
+
+        await _transcriptionService.StartAsync(
+            SelectedMicDevice?.DeviceIndex ?? 0,
+            SelectedLoopbackDevice?.DeviceIndex ?? 0,
+            UseMic,
+            UseLoopback
+        );
+    }
+
     private async Task DisconnectAsync()
     {
-        if (_service != null)
+        if (_voiceService != null)
         {
-            // Desregistra handlers para evitar memory leak e chamadas fantasma
-            _service.TranscriptReceived -= OnTranscriptReceived;
-            _service.StatusChanged -= OnStatusChanged;
-            _service.ErrorOccurred -= OnError;
-            _service.AnalyzingChanged -= OnAnalyzingChanged;
+            _voiceService.TranscriptReceived -= OnTranscriptReceived;
+            _voiceService.StatusChanged -= OnStatusChanged;
+            _voiceService.ErrorOccurred -= OnError;
+            _voiceService.AnalyzingChanged -= OnAnalyzingChanged;
 
-            await _service.StopAsync();
-            _service.Dispose();
-            _service = null;
+            await _voiceService.StopAsync();
+            _voiceService.Dispose();
+            _voiceService = null;
         }
+
+        if (_transcriptionService != null)
+        {
+            _transcriptionService.TranscriptReceived -= OnTranscriptReceived;
+            _transcriptionService.StatusChanged -= OnStatusChanged;
+            _transcriptionService.ErrorOccurred -= OnError;
+            _transcriptionService.AnalyzingChanged -= OnAnalyzingChanged;
+
+            await _transcriptionService.StopAsync();
+            _transcriptionService.Dispose();
+            _transcriptionService = null;
+        }
+
         IsConnected = false;
         SubtitleText = "Desconectado";
     }
@@ -319,7 +395,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         // Log via channel batched — zero Task.Run, zero File.Open por linha
         var logLine =
-            $"[{DateTime.Now:HH:mm:ss}] IsPartial={e.IsPartial}, Speaker={e.Speaker}, Text=\"{e.TranslatedText}\"";
+            $"[{DateTime.Now:HH:mm:ss}] IsPartial={e.IsPartial}, Speaker={e.Speaker}, Original=\"{e.OriginalText}\", Translated=\"{e.TranslatedText}\"";
         _logChannel.Writer.TryWrite(("transcripts.log", logLine));
 
         if (e.IsPartial)
@@ -348,6 +424,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             // Final transcript — prioridade normal, sempre entrega
             var translatedText = e.TranslatedText;
+            var originalText = e.OriginalText;
             var speaker = e.Speaker;
 
             _dispatcher.BeginInvoke(() =>
@@ -365,6 +442,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                     History.Add(new ConversationEntry
                     {
                         Speaker = speaker,
+                        OriginalText = originalText ?? "",
                         TranslatedText = finalText
                     });
                 }
@@ -411,14 +489,24 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
-        if (_service != null)
+        if (_voiceService != null)
         {
-            _service.TranscriptReceived -= OnTranscriptReceived;
-            _service.StatusChanged -= OnStatusChanged;
-            _service.ErrorOccurred -= OnError;
-            _service.AnalyzingChanged -= OnAnalyzingChanged;
-            _service.Dispose();
-            _service = null;
+            _voiceService.TranscriptReceived -= OnTranscriptReceived;
+            _voiceService.StatusChanged -= OnStatusChanged;
+            _voiceService.ErrorOccurred -= OnError;
+            _voiceService.AnalyzingChanged -= OnAnalyzingChanged;
+            _voiceService.Dispose();
+            _voiceService = null;
+        }
+
+        if (_transcriptionService != null)
+        {
+            _transcriptionService.TranscriptReceived -= OnTranscriptReceived;
+            _transcriptionService.StatusChanged -= OnStatusChanged;
+            _transcriptionService.ErrorOccurred -= OnError;
+            _transcriptionService.AnalyzingChanged -= OnAnalyzingChanged;
+            _transcriptionService.Dispose();
+            _transcriptionService = null;
         }
 
         // Finaliza o log writer
