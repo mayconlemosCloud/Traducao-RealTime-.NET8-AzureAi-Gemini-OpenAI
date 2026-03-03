@@ -17,6 +17,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private RealtimeService? _voiceService;
     private TranscriptionService? _transcriptionService;
+    private SpeakTranslateService? _speakService;
     private readonly Dispatcher _dispatcher;
 
     // ─── BINDABLE PROPERTIES ───────────────────────────────
@@ -155,9 +156,48 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    // ─── INTÉRPRETE ATIVO ─────────────────────────────────
+    private bool _isSpeakFeatureEnabled;
+    public bool IsSpeakFeatureEnabled
+    {
+        get => _isSpeakFeatureEnabled;
+        set { _isSpeakFeatureEnabled = value; OnPropertyChanged(); }
+    }
+
+    private bool _isSpeakConnected;
+    public bool IsSpeakConnected
+    {
+        get => _isSpeakConnected;
+        set { _isSpeakConnected = value; OnPropertyChanged(); OnPropertyChanged(nameof(SpeakButtonTooltip)); }
+    }
+
+    private string _speakStatusText = "";
+    public string SpeakStatusText
+    {
+        get => _speakStatusText;
+        set { _speakStatusText = value; OnPropertyChanged(); }
+    }
+
+    public string SpeakButtonTooltip => IsSpeakConnected ? "Parar Intérprete PT→EN" : "Iniciar Intérprete PT→EN";
+
+    private AudioDeviceInfo? _selectedSpeakMicDevice;
+    public AudioDeviceInfo? SelectedSpeakMicDevice
+    {
+        get => _selectedSpeakMicDevice;
+        set { _selectedSpeakMicDevice = value; OnPropertyChanged(); }
+    }
+
+    private AudioDeviceInfo? _selectedSpeakOutputDevice;
+    public AudioDeviceInfo? SelectedSpeakOutputDevice
+    {
+        get => _selectedSpeakOutputDevice;
+        set { _selectedSpeakOutputDevice = value; OnPropertyChanged(); }
+    }
+
     // ─── COLLECTIONS ──────────────────────────────────────
     public ObservableCollection<AudioDeviceInfo> MicDevices { get; } = new();
     public ObservableCollection<AudioDeviceInfo> LoopbackDevices { get; } = new();
+    public ObservableCollection<AudioDeviceInfo> SpeakOutputDevices { get; } = new();
     public ObservableCollection<ConversationEntry> History { get; } = new();
 
     // partial transcript accumulator (texto completo atual da fala)
@@ -200,8 +240,14 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         foreach (var d in RealtimeService.GetLoopbackDevices())
             LoopbackDevices.Add(d);
 
+        SpeakOutputDevices.Clear();
+        foreach (var d in SpeakTranslateService.GetOutputDevices())
+            SpeakOutputDevices.Add(d);
+
         if (MicDevices.Count > 0) SelectedMicDevice = MicDevices[0];
         if (LoopbackDevices.Count > 0) SelectedLoopbackDevice = LoopbackDevices[0];
+        if (MicDevices.Count > 0 && SelectedSpeakMicDevice == null) SelectedSpeakMicDevice = MicDevices[0];
+        if (SpeakOutputDevices.Count > 0) SelectedSpeakOutputDevice = SpeakOutputDevices[0];
     }
 
     // ─── COMMANDS ──────────────────────────────────────────
@@ -337,6 +383,68 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     public void RefreshDevices()
     {
         LoadDevices();
+    }
+
+    // ─── INTÉRPRETE ATIVO ─────────────────────────────────
+    public async Task ToggleSpeakConnectionAsync()
+    {
+        if (IsSpeakConnected)
+            await DisconnectSpeakAsync();
+        else
+            await ConnectSpeakAsync();
+    }
+
+    private async Task ConnectSpeakAsync()
+    {
+        var exeDir = AppDomain.CurrentDomain.BaseDirectory;
+        DotEnv.Load(new DotEnvOptions(envFilePaths: new[] {
+            Path.Combine(exeDir, ".env"),
+            Path.Combine(Directory.GetCurrentDirectory(), ".env"),
+            ".env"
+        }, ignoreExceptions: true));
+
+        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            SpeakStatusText = "⚠ OPENAI_API_KEY não encontrada";
+            return;
+        }
+
+        try
+        {
+            _speakService = new SpeakTranslateService(apiKey);
+            _speakService.StatusChanged += OnSpeakStatusChanged;
+            _speakService.ErrorOccurred += OnSpeakError;
+            _speakService.SpeakingChanged += OnSpeakingChanged;
+
+            await _speakService.StartAsync(
+                SelectedSpeakMicDevice?.DeviceIndex ?? 0,
+                SelectedSpeakOutputDevice?.DeviceIndex ?? 0
+            );
+
+            IsSpeakConnected = true;
+        }
+        catch (Exception ex)
+        {
+            SpeakStatusText = $"⚠ Erro: {ex.Message}";
+        }
+    }
+
+    private async Task DisconnectSpeakAsync()
+    {
+        if (_speakService != null)
+        {
+            _speakService.StatusChanged -= OnSpeakStatusChanged;
+            _speakService.ErrorOccurred -= OnSpeakError;
+            _speakService.SpeakingChanged -= OnSpeakingChanged;
+
+            await _speakService.StopAsync();
+            _speakService.Dispose();
+            _speakService = null;
+        }
+
+        IsSpeakConnected = false;
+        SpeakStatusText = "";
     }
 
     private void SendMessage()
@@ -482,6 +590,23 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
+    // ─── SPEAK EVENT HANDLERS ──────────────────────────────
+    private void OnSpeakStatusChanged(object? sender, StatusEventArgs e)
+    {
+        _dispatcher.BeginInvoke(() => SpeakStatusText = e.Message);
+    }
+
+    private void OnSpeakError(object? sender, StatusEventArgs e)
+    {
+        _logChannel.Writer.TryWrite(("error.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [Speak] {e.Message}"));
+        _dispatcher.BeginInvoke(() => SpeakStatusText = $"⚠ {e.Message}");
+    }
+
+    private void OnSpeakingChanged(object? sender, bool isSpeaking)
+    {
+        // Reservado para indicadores visuais futuros
+    }
+
     // ─── INotifyPropertyChanged ────────────────────────────
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)
@@ -507,6 +632,15 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             _transcriptionService.AnalyzingChanged -= OnAnalyzingChanged;
             _transcriptionService.Dispose();
             _transcriptionService = null;
+        }
+
+        if (_speakService != null)
+        {
+            _speakService.StatusChanged -= OnSpeakStatusChanged;
+            _speakService.ErrorOccurred -= OnSpeakError;
+            _speakService.SpeakingChanged -= OnSpeakingChanged;
+            _speakService.Dispose();
+            _speakService = null;
         }
 
         // Finaliza o log writer

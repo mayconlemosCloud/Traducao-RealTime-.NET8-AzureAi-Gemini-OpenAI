@@ -40,6 +40,8 @@
                          Color="#FF4A9EFF"/>
         <SolidColorBrush x:Key="AccentGreen"
                          Color="#FF4AFF8A"/>
+        <SolidColorBrush x:Key="AccentGold"
+                         Color="#FFFFAA00"/>
         <SolidColorBrush x:Key="TextPrimary"
                          Color="#FFFFFFFF"/>
         <SolidColorBrush x:Key="TextSecondary"
@@ -210,6 +212,14 @@
                             </Style>
                         </Ellipse.Style>
                     </Ellipse>
+                    <!-- Speak status dot (gold, visible when interpreter connected) -->
+                    <Ellipse Width="8"
+                             Height="8"
+                             Fill="{StaticResource AccentGold}"
+                             Margin="4,0,0,0"
+                             VerticalAlignment="Center"
+                             ToolTip="{Binding SpeakStatusText}"
+                             Visibility="{Binding IsSpeakConnected, Converter={StaticResource BoolToVis}}"/>
                     <!-- Analyzing label (pulsing) -->
                     <TextBlock x:Name="AnalyzingLabel"
                                Text="🔄 Analisando..."
@@ -258,6 +268,14 @@
                             Content="{Binding MuteIcon}"
                             Click="ToggleMute_Click"
                             ToolTip="Mute/Unmute"/>
+
+                    <!-- Speak (Intérprete Ativo PT→EN) -->
+                    <Button Style="{StaticResource BarButton}"
+                            Content="🗣️"
+                            Click="ToggleSpeak_Click"
+                            ToolTip="{Binding SpeakButtonTooltip}"
+                            Visibility="{Binding IsSpeakFeatureEnabled, Converter={StaticResource BoolToVis}}"
+                            FontSize="14"/>
 
                     <!-- Connect/Disconnect -->
                     <Button Style="{StaticResource BarButton}"
@@ -417,6 +435,138 @@
                             Margin="0,4,0,0"
                             Foreground="{StaticResource AccentBlue}"
                             FontSize="11"/>
+
+                    <!-- ── INTÉRPRETE ATIVO ── -->
+                    <Border BorderBrush="#33FFAA00"
+                            BorderThickness="0,1,0,0"
+                            Margin="0,12,0,0"
+                            Padding="0,10,0,0">
+                        <StackPanel>
+                            <TextBlock Text="I N T É R P R E T E   A T I V O   ( P T → E N )"
+                                       Foreground="{StaticResource AccentGold}"
+                                       FontSize="10"
+                                       FontWeight="Bold"
+                                       FontFamily="Segoe UI"
+                                       Margin="0,0,0,4"/>
+                            <TextBlock Text="Fale em português e a IA fala em inglês no dispositivo escolhido."
+                                       Foreground="{StaticResource TextSecondary}"
+                                       FontSize="10"
+                                       FontFamily="Segoe UI"
+                                       FontStyle="Italic"
+                                       Margin="0,0,0,8"
+                                       TextWrapping="Wrap"/>
+
+                            <!-- Enable toggle -->
+                            <CheckBox IsChecked="{Binding IsSpeakFeatureEnabled}"
+                                      VerticalAlignment="Center"
+                                      Foreground="{StaticResource TextPrimary}"
+                                      Margin="0,0,0,8">
+                                <TextBlock Text="Habilitar Intérprete Ativo"
+                                           Foreground="{StaticResource TextPrimary}"
+                                           FontSize="12"
+                                           FontFamily="Segoe UI"
+                                           FontWeight="SemiBold"/>
+                            </CheckBox>
+
+                            <!-- Config (visible when enabled) -->
+                            <StackPanel Visibility="{Binding IsSpeakFeatureEnabled, Converter={StaticResource BoolToVis}}">
+                                <!-- Mic for speaking -->
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="🎤"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Microfone (sua voz em PT-BR)"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   FontSize="12"
+                                                   FontFamily="Segoe UI"/>
+                                        <ComboBox ItemsSource="{Binding MicDevices}"
+                                                  SelectedItem="{Binding SelectedSpeakMicDevice}"
+                                                  FontSize="11"
+                                                  Margin="0,4,0,0"
+                                                  MaxWidth="400"
+                                                  HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Output device -->
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="🔈"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="Saída de áudio EN (ex: VB-Cable, alto-falante)"
+                                                   Foreground="{StaticResource TextPrimary}"
+                                                   FontSize="12"
+                                                   FontFamily="Segoe UI"/>
+                                        <ComboBox ItemsSource="{Binding SpeakOutputDevices}"
+                                                  SelectedItem="{Binding SelectedSpeakOutputDevice}"
+                                                  FontSize="11"
+                                                  Margin="0,4,0,0"
+                                                  MaxWidth="400"
+                                                  HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Connect/Disconnect speak -->
+                                <Button Style="{StaticResource BarButton}"
+                                        Click="ToggleSpeak_Click"
+                                        HorizontalAlignment="Left"
+                                        Margin="0,4,0,0"
+                                        FontSize="11">
+                                    <Button.Content>
+                                        <TextBlock>
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text"
+                                                            Value="🗣️ Iniciar Intérprete"/>
+                                                    <Setter Property="Foreground"
+                                                            Value="{StaticResource AccentGold}"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsSpeakConnected}"
+                                                                     Value="True">
+                                                            <Setter Property="Text"
+                                                                    Value="⏹ Parar Intérprete"/>
+                                                            <Setter Property="Foreground"
+                                                                    Value="#FFFF6B6B"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Button.Content>
+                                </Button>
+
+                                <!-- Status -->
+                                <TextBlock Text="{Binding SpeakStatusText}"
+                                           Foreground="{StaticResource AccentGold}"
+                                           FontSize="10"
+                                           FontFamily="Segoe UI"
+                                           Margin="0,4,0,0"/>
+
+                                <!-- Warning -->
+                                <TextBlock Foreground="#99FFAA00"
+                                           FontSize="9"
+                                           FontFamily="Segoe UI"
+                                           FontStyle="Italic"
+                                           Margin="0,8,0,0"
+                                           TextWrapping="Wrap"
+                                           Text="⚠ Atenção: se a saída do intérprete for o mesmo dispositivo que o tradutor captura via loopback, pode haver feedback de áudio."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
                 </StackPanel>
             </Border>
 

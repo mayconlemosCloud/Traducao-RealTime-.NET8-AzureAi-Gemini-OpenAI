@@ -94,6 +94,11 @@ public partial class MainWindow : Window
         _vm.RefreshDevices();
     }
 
+    private async void ToggleSpeak_Click(object sender, RoutedEventArgs e)
+    {
+        await _vm.ToggleSpeakConnectionAsync();
+    }
+
     private void Close_Click(object sender, RoutedEventArgs e)
     {
         _vm.Dispose();
