@@ -435,76 +435,76 @@ public class SpeakTranslateService : IDisposable
             // ║ acúmulo progressivo de turns que causava o loop.                       ║
             // ╚══════════════════════════════════════════════════════════════════════════╝
             case "response.audio.done":
-            {
-                // Captura item_id do output para deleção do histórico
-                string? outputItemId = null;
-                if (root.TryGetProperty("item_id", out var audioItemIdEl))
-                    outputItemId = audioItemIdEl.GetString();
-
-                _ = Task.Run(async () =>
                 {
-                    _cleanupInProgress = true;
-                    try
+                    // Captura item_id do output para deleção do histórico
+                    string? outputItemId = null;
+                    if (root.TryGetProperty("item_id", out var audioItemIdEl))
+                        outputItemId = audioItemIdEl.GetString();
+
+                    _ = Task.Run(async () =>
                     {
-                        // 1) Espera buffer de playback drenar COMPLETAMENTE
-                        //    NUNCA corta o áudio — deixa a frase terminar
-                        while ((_bufferProvider?.BufferedBytes ?? 0) > 0
-                               && !(_cts?.Token.IsCancellationRequested ?? true))
+                        _cleanupInProgress = true;
+                        try
                         {
-                            await Task.Delay(100, _cts!.Token).ConfigureAwait(false);
+                            // 1) Espera buffer de playback drenar COMPLETAMENTE
+                            //    NUNCA corta o áudio — deixa a frase terminar
+                            while ((_bufferProvider?.BufferedBytes ?? 0) > 0
+                                   && !(_cts?.Token.IsCancellationRequested ?? true))
+                            {
+                                await Task.Delay(100, _cts!.Token).ConfigureAwait(false);
+                            }
+
+                            // 2) Marca fim do playback
+                            _isPlaying = false;
+
+                            // 3) Inicia cooldown — IsMicBlocked continua true!
+                            _playbackEndedAt = DateTime.UtcNow;
+
+                            // 4) Espera cooldown expirar (eco no ambiente dissipa)
+                            var cooldownMs = (int)(PlaybackCooldownSeconds * 1000);
+                            await Task.Delay(cooldownMs, _cts!.Token).ConfigureAwait(false);
+
+                            // 5) Limpa buffer do servidor (resíduo de mic pós-cooldown)
+                            if (_ws?.State == WebSocketState.Open)
+                                QueueSend(new { type = "input_audio_buffer.clear" });
+
+                            // 6) Deleta conversation items do histórico
+                            //    Intérprete não precisa de contexto entre frases.
+                            //    Sem deleção, o histórico acumula → modelo alucina → loop.
+                            if (_ws?.State == WebSocketState.Open)
+                            {
+                                if (_lastCommittedItemId != null)
+                                {
+                                    QueueSend(new { type = "conversation.item.delete", item_id = _lastCommittedItemId });
+                                    System.Diagnostics.Debug.WriteLine(
+                                        $"[SpeakTranslate] Deletado input item: {_lastCommittedItemId}");
+                                }
+                                if (outputItemId != null)
+                                {
+                                    QueueSend(new { type = "conversation.item.delete", item_id = outputItemId });
+                                    System.Diagnostics.Debug.WriteLine(
+                                        $"[SpeakTranslate] Deletado output item: {outputItemId}");
+                                }
+                            }
+
+                            // 7) Reseta estado
+                            _hasUncommittedAudio = false;
+                            _responseAudioBytes = 0;
+                            _lastCommittedItemId = null;
+
+                            StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Fale em português..." });
                         }
-
-                        // 2) Marca fim do playback
-                        _isPlaying = false;
-
-                        // 3) Inicia cooldown — IsMicBlocked continua true!
-                        _playbackEndedAt = DateTime.UtcNow;
-
-                        // 4) Espera cooldown expirar (eco no ambiente dissipa)
-                        var cooldownMs = (int)(PlaybackCooldownSeconds * 1000);
-                        await Task.Delay(cooldownMs, _cts!.Token).ConfigureAwait(false);
-
-                        // 5) Limpa buffer do servidor (resíduo de mic pós-cooldown)
-                        if (_ws?.State == WebSocketState.Open)
-                            QueueSend(new { type = "input_audio_buffer.clear" });
-
-                        // 6) Deleta conversation items do histórico
-                        //    Intérprete não precisa de contexto entre frases.
-                        //    Sem deleção, o histórico acumula → modelo alucina → loop.
-                        if (_ws?.State == WebSocketState.Open)
+                        catch (OperationCanceledException) { }
+                        finally
                         {
-                            if (_lastCommittedItemId != null)
-                            {
-                                QueueSend(new { type = "conversation.item.delete", item_id = _lastCommittedItemId });
-                                System.Diagnostics.Debug.WriteLine(
-                                    $"[SpeakTranslate] Deletado input item: {_lastCommittedItemId}");
-                            }
-                            if (outputItemId != null)
-                            {
-                                QueueSend(new { type = "conversation.item.delete", item_id = outputItemId });
-                                System.Diagnostics.Debug.WriteLine(
-                                    $"[SpeakTranslate] Deletado output item: {outputItemId}");
-                            }
+                            _cleanupInProgress = false;
+                            // ProcessNext é chamado AQUI, não no response.done.
+                            // Garante que cleanup terminou antes da próxima response.
+                            ProcessNextQueuedResponse();
                         }
-
-                        // 7) Reseta estado
-                        _hasUncommittedAudio = false;
-                        _responseAudioBytes = 0;
-                        _lastCommittedItemId = null;
-
-                        StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Fale em português..." });
-                    }
-                    catch (OperationCanceledException) { }
-                    finally
-                    {
-                        _cleanupInProgress = false;
-                        // ProcessNext é chamado AQUI, não no response.done.
-                        // Garante que cleanup terminou antes da próxima response.
-                        ProcessNextQueuedResponse();
-                    }
-                }, _cts!.Token);
-                break;
-            }
+                    }, _cts!.Token);
+                    break;
+                }
 
             case "response.done":
                 {
