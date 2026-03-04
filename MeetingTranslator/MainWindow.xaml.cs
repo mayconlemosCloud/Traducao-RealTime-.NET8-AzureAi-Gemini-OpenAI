@@ -33,14 +33,19 @@ public partial class MainWindow : Window
                 // que congela o dispatcher do WPF.
                 if (_vm.History.Count > 0 && _vm.IsHistoryVisible && HistoryList.IsVisible)
                 {
-                    try
+                    // Defer scroll so WPF finishes measuring/arranging the new item first
+                    Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, () =>
                     {
-                        HistoryList.ScrollIntoView(_vm.History[^1]);
-                    }
-                    catch
-                    {
-                        // Safety net: ignora falhas de layout em edge cases
-                    }
+                        try
+                        {
+                            if (_vm.History.Count > 0)
+                                HistoryList.ScrollIntoView(_vm.History[^1]);
+                        }
+                        catch
+                        {
+                            // Safety net: ignora falhas de layout em edge cases
+                        }
+                    });
                 }
             }
         };

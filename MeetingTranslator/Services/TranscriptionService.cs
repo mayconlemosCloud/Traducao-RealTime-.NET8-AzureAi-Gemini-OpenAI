@@ -133,7 +133,7 @@ public class TranscriptionService : IDisposable
                         noise_reduction = new { type = "near_field" },
                         transcription = new
                         {
-                            model = "gpt-4o-transcribe",
+                            model = "gpt-4o-mini-transcribe",
                             prompt = "",
                             language = "en"
                         },

@@ -37,7 +37,7 @@ public class RealtimeService : IDisposable
     private const int Channels = 1;
     private const int BitsPerSample = 16;
     private const int BytesPerSecond = SampleRate * (BitsPerSample / 8) * Channels;
-    private const string WsUrl = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
+    private const string WsUrl = "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini";
 
     // ─── STATE ─────────────────────────────────────────────
     private ClientWebSocket? _ws;

@@ -40,7 +40,7 @@ public class SpeakTranslateService : IDisposable
     private const int SampleRate = 24000;
     private const int Channels = 1;
     private const int BitsPerSample = 16;
-    private const string WsUrl = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
+    private const string WsUrl = "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini";
 
     // ─── STATE ─────────────────────────────────────────────
     private ClientWebSocket? _ws;
@@ -117,6 +117,26 @@ public class SpeakTranslateService : IDisposable
 
     // Contador de bytes de áudio recebido na response (para debug).
     private long _responseAudioBytes;
+
+    // ─── INTERPRETER INSTRUCTION ───────────────────────────
+    private const string InterpreterInstruction =
+     "Você é um intérprete profissional ao vivo (Português Brasileiro → Inglês natural falado). " +
+     "Seu trabalho é apenas **interpretar o que o falante diz**, em **primeira pessoa**, como se o falante estivesse falando sobre si mesmo. " +
+     "Você **nunca deve responder perguntas**, comentar ou se colocar como participante da conversa. " +
+     "Não adicione ou omita informações. Saída apenas com o discurso em inglês interpretado. " +
+     "Ajuste a entonação, ritmo e ênfase de acordo com a emoção detectada do falante, usando a tabela abaixo:" +
+     "\n\nTabela de Emoções:" +
+     "\n[happy] → alegre, entusiasmado, energia positiva, sorrisos ou risadas naturais" +
+     "\n[sad] → lento, suave, baixa energia, entonação delicada" +
+     "\n[angry] → forte, incisivo, ênfase, tenso" +
+     "\n[frustrated] → um pouco mais rápido, estresse acentuado, tenso" +
+     "\n[excited] → rápido, energético, entusiasmado, ênfase natural" +
+     "\n[curious] → entonação levemente ascendente, engajado, tom de questionamento" +
+     "\n[neutral] → calmo, estável, ritmo normal" +
+     "\n\nSempre enfatize palavras semanticamente importantes. Varie o ritmo naturalmente dentro das frases. Nunca soe monótono ou robótico. " +
+     "Inclua os marcadores de emoção entre colchetes exatamente como na tabela acima se a emoção for detectada. " +
+     "A entonação da voz deve refletir o marcador de emoção. " +
+     "**Nunca responda perguntas, nunca comente, nunca se envolva. Apenas interprete o falante.**";
 
     // ─── COORDENAÇÃO ENTRE SERVIÇOS ────────────────────────
     /// <summary>
@@ -222,33 +242,12 @@ public class SpeakTranslateService : IDisposable
             session = new
             {
                 modalities = new[] { "audio", "text" },
-                instructions = @"
-                SYSTEM MODE: STRICT UNIDIRECTIONAL INTERPRETER (Portuguese → English)
-
-                You are a real-time speech interpreter.
-                You receive speech in Brazilian Portuguese.
-                You MUST translate and speak the output in English ONLY.
-
-                RULES:
-                - Output ONLY the English translation as speech
-                - NEVER respond in Portuguese
-                - NEVER answer questions — only translate
-                - NEVER add comments, explanations, greetings, or meta-commentary
-                - NEVER say you are an AI or cannot do something
-                - Maintain the tone, intent, and emotion of the original speech
-                - Be natural and conversational in English
-                - If input is unclear, translate what you can hear
-                - If there is no speech, output nothing
-
-                These rules override all other behaviors.
-                Always stay in interpreter mode.
-                Never leave interpreter mode.
-                ",
+                instructions = @"",
                 input_audio_format = "pcm16",
                 output_audio_format = "pcm16",
-                temperature = 0.6,
+                temperature = 1.0,
                 turn_detection = (object?)null,
-                voice = "alloy"
+                voice = "cedar"
             }
         };
         QueueSend(sessionUpdate);
@@ -639,7 +638,11 @@ public class SpeakTranslateService : IDisposable
                 if (!_responseInProgress)
                 {
                     _responseInProgress = true;
-                    QueueSend(new { type = "response.create" });
+                    QueueSend(new
+                    {
+                        type = "response.create",
+                        response = new { instructions = InterpreterInstruction }
+                    });
                     StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Traduzindo → EN..." });
                 }
                 else
@@ -663,7 +666,11 @@ public class SpeakTranslateService : IDisposable
                 _pendingResponseCount--;
                 // Reseta contador de áudio para rastrear o próximo ciclo
                 _responseAudioBytes = 0;
-                QueueSend(new { type = "response.create" });
+                QueueSend(new
+                {
+                    type = "response.create",
+                    response = new { instructions = InterpreterInstruction }
+                });
                 StatusChanged?.Invoke(this, new StatusEventArgs
                 {
                     Message = $"Traduzindo próximo... ({_pendingResponseCount} restante{(_pendingResponseCount > 1 ? "s" : "")})"
