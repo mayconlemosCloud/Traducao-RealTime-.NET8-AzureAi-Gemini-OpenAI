@@ -19,7 +19,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private RealtimeService? _voiceService;
     private TranscriptionService? _transcriptionService;
-    private SpeakTranslateService? _speakService;
+    private IInterpreterService? _speakService;
     private readonly Dispatcher _dispatcher;
 
     // ─── COORDENAÇÃO ENTRE SERVIÇOS ────────────────────────
@@ -184,6 +184,66 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         set { _isSpeakFeatureEnabled = value; OnPropertyChanged(); }
     }
 
+    private InterpreterProvider _selectedInterpreterProvider = InterpreterProvider.OpenAI;
+    public InterpreterProvider SelectedInterpreterProvider
+    {
+        get => _selectedInterpreterProvider;
+        set
+        {
+            _selectedInterpreterProvider = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsOpenAiInterpreterProvider));
+            OnPropertyChanged(nameof(IsAzureInterpreterProvider));
+            OnPropertyChanged(nameof(ShowOpenAiInterpreterSettings));
+            OnPropertyChanged(nameof(ShowAzureInterpreterSettings));
+            OnPropertyChanged(nameof(InterpreterProviderDescription));
+        }
+    }
+
+    public bool IsOpenAiInterpreterProvider
+    {
+        get => _selectedInterpreterProvider == InterpreterProvider.OpenAI;
+        set { if (value) SelectedInterpreterProvider = InterpreterProvider.OpenAI; }
+    }
+
+    public bool IsAzureInterpreterProvider
+    {
+        get => _selectedInterpreterProvider == InterpreterProvider.AzureSpeech;
+        set { if (value) SelectedInterpreterProvider = InterpreterProvider.AzureSpeech; }
+    }
+
+    public bool ShowOpenAiInterpreterSettings => _selectedInterpreterProvider == InterpreterProvider.OpenAI;
+
+    public bool ShowAzureInterpreterSettings => _selectedInterpreterProvider == InterpreterProvider.AzureSpeech;
+
+    public string InterpreterProviderDescription => _selectedInterpreterProvider switch
+    {
+        InterpreterProvider.OpenAI => "Mantem o interprete atual com OpenAI Realtime. Sem quebrar o fluxo que voce ja validou.",
+        InterpreterProvider.AzureSpeech => "Prepara o interprete para a arquitetura Azure Speech/Live Interpreter. Ideal para uma segunda implementacao sem substituir a atual.",
+        _ => string.Empty
+    };
+
+    private string _azureSpeechKey = "";
+    public string AzureSpeechKey
+    {
+        get => _azureSpeechKey;
+        set { _azureSpeechKey = value; OnPropertyChanged(); }
+    }
+
+    private string _azureSpeechRegion = "";
+    public string AzureSpeechRegion
+    {
+        get => _azureSpeechRegion;
+        set { _azureSpeechRegion = value; OnPropertyChanged(); }
+    }
+
+    private string _azureSpeechVoice = "en-US-JennyNeural";
+    public string AzureSpeechVoice
+    {
+        get => _azureSpeechVoice;
+        set { _azureSpeechVoice = value; OnPropertyChanged(); }
+    }
+
     private bool _isSpeakConnected;
     public bool IsSpeakConnected
     {
@@ -269,15 +329,31 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         });
     private Task? _logWriterTask;
     private readonly CancellationTokenSource _logCts = new();
+    private bool _isDisposed;
 
     public ICommand SendMessageCommand { get; }
 
     public MainViewModel()
     {
         _dispatcher = Application.Current.Dispatcher;
+        LoadEnvironmentVariables();
         LoadDevices();
         SendMessageCommand = new DelegateCommand(_ => SendMessage(), _ => !string.IsNullOrWhiteSpace(InputText));
         _logWriterTask = Task.Run(RunLogWriter);
+    }
+
+    private void LoadEnvironmentVariables()
+    {
+        var exeDir = AppDomain.CurrentDomain.BaseDirectory;
+        DotEnv.Load(new DotEnvOptions(envFilePaths: new[] {
+            Path.Combine(exeDir, ".env"),
+            Path.Combine(Directory.GetCurrentDirectory(), ".env"),
+            ".env"
+        }, ignoreExceptions: true));
+
+        AzureSpeechKey = Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY") ?? "";
+        AzureSpeechRegion = Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION") ?? "";
+        AzureSpeechVoice = Environment.GetEnvironmentVariable("AZURE_SPEECH_VOICE") ?? "en-US-JennyNeural";
     }
 
     private void LoadDevices()
@@ -285,6 +361,9 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         MicDevices.Clear();
         foreach (var d in RealtimeService.GetInputDevices())
             MicDevices.Add(d);
+
+        OnPropertyChanged(nameof(ShowOpenAiInterpreterSettings));
+        OnPropertyChanged(nameof(ShowAzureInterpreterSettings));
 
         LoopbackDevices.Clear();
         foreach (var d in RealtimeService.GetLoopbackDevices())
@@ -315,13 +394,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task ConnectAsync()
     {
-        // Procura .env na pasta do executável e na pasta de trabalho atual
-        var exeDir = AppDomain.CurrentDomain.BaseDirectory;
-        DotEnv.Load(new DotEnvOptions(envFilePaths: new[] {
-            Path.Combine(exeDir, ".env"),
-            Path.Combine(Directory.GetCurrentDirectory(), ".env"),
-            ".env"
-        }, ignoreExceptions: true));
+        LoadEnvironmentVariables();
 
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -539,23 +612,14 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task ConnectSpeakAsync()
     {
-        var exeDir = AppDomain.CurrentDomain.BaseDirectory;
-        DotEnv.Load(new DotEnvOptions(envFilePaths: new[] {
-            Path.Combine(exeDir, ".env"),
-            Path.Combine(Directory.GetCurrentDirectory(), ".env"),
-            ".env"
-        }, ignoreExceptions: true));
-
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            SpeakStatusText = "⚠ OPENAI_API_KEY não encontrada";
-            return;
-        }
+        LoadEnvironmentVariables();
 
         try
         {
-            _speakService = new SpeakTranslateService(apiKey, _sharedAudioState);
+            _speakService = CreateInterpreterService();
+            if (_speakService == null)
+                return;
+
             _speakService.StatusChanged += OnSpeakStatusChanged;
             _speakService.ErrorOccurred += OnSpeakError;
             _speakService.SpeakingChanged += OnSpeakingChanged;
@@ -569,7 +633,48 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
         catch (Exception ex)
         {
-            SpeakStatusText = $"⚠ Erro: {ex.Message}";
+            var detailedMessage = ex.InnerException == null
+                ? ex.Message
+                : $"{ex.Message} | Inner: {ex.InnerException.Message}";
+
+            _logChannel.Writer.TryWrite(("error.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [SpeakStart] {ex}"));
+            SpeakStatusText = $"⚠ Erro ao iniciar intérprete: {detailedMessage}";
+        }
+    }
+
+    private IInterpreterService? CreateInterpreterService()
+    {
+        switch (SelectedInterpreterProvider)
+        {
+            case InterpreterProvider.OpenAI:
+                var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    SpeakStatusText = "⚠ OPENAI_API_KEY nao encontrada";
+                    return null;
+                }
+                return new OpenAiInterpreterServiceAdapter(apiKey, _sharedAudioState);
+
+            case InterpreterProvider.AzureSpeech:
+                var speechKey = string.IsNullOrWhiteSpace(AzureSpeechKey)
+                    ? Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY")
+                    : AzureSpeechKey;
+                var speechRegion = string.IsNullOrWhiteSpace(AzureSpeechRegion)
+                    ? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION")
+                    : AzureSpeechRegion;
+                var speechVoice = string.IsNullOrWhiteSpace(AzureSpeechVoice)
+                    ? Environment.GetEnvironmentVariable("AZURE_SPEECH_VOICE")
+                    : AzureSpeechVoice;
+                if (string.IsNullOrWhiteSpace(speechKey) || string.IsNullOrWhiteSpace(speechRegion))
+                {
+                    SpeakStatusText = "⚠ Configure AZURE_SPEECH_KEY e AZURE_SPEECH_REGION no .env para usar o interprete Azure";
+                    return null;
+                }
+                return new AzureSpeechInterpreterService(speechKey, speechRegion, _sharedAudioState, speechVoice);
+
+            default:
+                SpeakStatusText = "⚠ Provedor de interprete invalido";
+                return null;
         }
     }
 
@@ -753,6 +858,11 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public void Dispose()
     {
+        if (_isDisposed)
+            return;
+
+        _isDisposed = true;
+
         // Restaura mute do mic se este app mutou
         if (_micMuteManaged && IsMuted)
         {
@@ -790,8 +900,8 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         // Finaliza o log writer
-        _logCts.Cancel();
+        try { _logCts.Cancel(); } catch (ObjectDisposedException) { }
         _logChannel.Writer.TryComplete();
-        _logCts.Dispose();
+        try { _logCts.Dispose(); } catch (ObjectDisposedException) { }
     }
 }

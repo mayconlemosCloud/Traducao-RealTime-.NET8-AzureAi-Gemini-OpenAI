@@ -456,6 +456,120 @@
                                        Margin="0,0,0,8"
                                        TextWrapping="Wrap"/>
 
+                            <TextBlock Text="P R O V E D O R   D O   I N T E R P R E T E"
+                                       Foreground="{StaticResource AccentGold}"
+                                       FontSize="9"
+                                       FontWeight="Bold"
+                                       FontFamily="Segoe UI"
+                                       Margin="0,0,0,6"/>
+
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,0,0,4">
+                                <RadioButton GroupName="InterpreterProvider"
+                                             IsChecked="{Binding IsOpenAiInterpreterProvider}"
+                                             VerticalAlignment="Center"
+                                             Foreground="{StaticResource TextPrimary}"
+                                             Margin="0,0,16,0">
+                                    <TextBlock Text="OpenAI"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               FontSize="12"
+                                               FontFamily="Segoe UI"
+                                               FontWeight="SemiBold"/>
+                                </RadioButton>
+                                <RadioButton GroupName="InterpreterProvider"
+                                             IsChecked="{Binding IsAzureInterpreterProvider}"
+                                             VerticalAlignment="Center"
+                                             Foreground="{StaticResource TextPrimary}">
+                                    <TextBlock Text="Azure Speech"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               FontSize="12"
+                                               FontFamily="Segoe UI"
+                                               FontWeight="SemiBold"/>
+                                </RadioButton>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding InterpreterProviderDescription}"
+                                       Foreground="{StaticResource TextSecondary}"
+                                       FontSize="10"
+                                       FontFamily="Segoe UI"
+                                       FontStyle="Italic"
+                                       Margin="0,0,0,10"
+                                       TextWrapping="Wrap"/>
+
+                            <Border BorderBrush="#22FFFFFF"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,8"
+                                    Margin="0,0,0,10"
+                                    Visibility="{Binding ShowOpenAiInterpreterSettings, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="OpenAI"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               FontSize="11"
+                                               FontFamily="Segoe UI"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock Text="Usa a implementacao atual do SpeakTranslateService. A credencial continua vindo de OPENAI_API_KEY no .env."
+                                               Foreground="{StaticResource TextSecondary}"
+                                               FontSize="10"
+                                               FontFamily="Segoe UI"
+                                               Margin="0,4,0,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <Border BorderBrush="#224A9EFF"
+                                    BorderThickness="1"
+                                    CornerRadius="6"
+                                    Padding="10,8"
+                                    Margin="0,0,0,10"
+                                    Visibility="{Binding ShowAzureInterpreterSettings, Converter={StaticResource BoolToVis}}">
+                                <StackPanel>
+                                    <TextBlock Text="Azure Speech"
+                                               Foreground="{StaticResource AccentBlue}"
+                                               FontSize="11"
+                                               FontFamily="Segoe UI"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,6"/>
+
+                                    <TextBlock Text="Speech Key"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               FontSize="11"
+                                               FontFamily="Segoe UI"/>
+                                    <TextBox Text="{Binding AzureSpeechKey, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="11"
+                                             Margin="0,4,0,8"
+                                             MinWidth="280"
+                                             HorizontalAlignment="Left"/>
+
+                                    <TextBlock Text="Speech Region"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               FontSize="11"
+                                               FontFamily="Segoe UI"/>
+                                    <TextBox Text="{Binding AzureSpeechRegion, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="11"
+                                             Margin="0,4,0,8"
+                                             MinWidth="280"
+                                             HorizontalAlignment="Left"/>
+
+                                    <TextBlock Text="Voice"
+                                               Foreground="{StaticResource TextPrimary}"
+                                               FontSize="11"
+                                               FontFamily="Segoe UI"/>
+                                    <TextBox Text="{Binding AzureSpeechVoice, UpdateSourceTrigger=PropertyChanged}"
+                                             FontSize="11"
+                                             Margin="0,4,0,0"
+                                             MinWidth="280"
+                                             HorizontalAlignment="Left"/>
+
+                                    <TextBlock Text="Exemplo: en-US-JennyNeural, en-US-AriaNeural, en-US-Ava:DragonHDLatestNeural"
+                                               Foreground="{StaticResource TextSecondary}"
+                                               FontSize="9"
+                                               FontFamily="Segoe UI"
+                                               Margin="0,4,0,0"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
                             <!-- Enable toggle -->
                             <CheckBox IsChecked="{Binding IsSpeakFeatureEnabled}"
                                       VerticalAlignment="Center"
