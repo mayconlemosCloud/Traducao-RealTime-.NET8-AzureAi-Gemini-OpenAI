@@ -92,6 +92,161 @@
             </Setter>
         </Style>
 
+        <!-- Dark TabControl -->
+        <Style x:Key="DarkTabControl"
+               TargetType="TabControl">
+            <Setter Property="Background"
+                    Value="Transparent"/>
+            <Setter Property="BorderThickness"
+                    Value="0"/>
+            <Setter Property="Padding"
+                    Value="0"/>
+        </Style>
+
+        <!-- Dark TabItem -->
+        <Style x:Key="DarkTabItem"
+               TargetType="TabItem">
+            <Setter Property="Foreground"
+                    Value="{StaticResource TextSecondary}"/>
+            <Setter Property="FontFamily"
+                    Value="Segoe UI"/>
+            <Setter Property="FontSize"
+                    Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="bd"
+                                Padding="14,8"
+                                Background="Transparent"
+                                BorderBrush="Transparent"
+                                BorderThickness="0,0,0,2"
+                                Cursor="Hand">
+                            <ContentPresenter ContentSource="Header"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected"
+                                     Value="True">
+                                <Setter TargetName="bd"
+                                        Property="BorderBrush"
+                                        Value="{StaticResource AccentBlue}"/>
+                                <Setter Property="Foreground"
+                                        Value="{StaticResource TextPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="{StaticResource ButtonHover}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Dark ComboBox -->
+        <Style x:Key="DarkComboBox"
+               TargetType="ComboBox">
+            <Setter Property="Background"
+                    Value="#22FFFFFF"/>
+            <Setter Property="Foreground"
+                    Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderBrush"
+                    Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+            <Setter Property="FontSize"
+                    Value="11"/>
+            <Setter Property="FontFamily"
+                    Value="Segoe UI"/>
+            <Setter Property="Padding"
+                    Value="6,4"/>
+            <Setter Property="MaxWidth"
+                    Value="380"/>
+            <Setter Property="HorizontalAlignment"
+                    Value="Left"/>
+            <Setter Property="Margin"
+                    Value="0,4,0,0"/>
+        </Style>
+
+        <!-- Pill RadioButton -->
+        <Style x:Key="PillRadio"
+               TargetType="RadioButton">
+            <Setter Property="Foreground"
+                    Value="{StaticResource TextSecondary}"/>
+            <Setter Property="FontFamily"
+                    Value="Segoe UI"/>
+            <Setter Property="FontSize"
+                    Value="12"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
+            <Setter Property="Margin"
+                    Value="0,0,6,0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="bd"
+                                Background="#11FFFFFF"
+                                CornerRadius="12"
+                                Padding="14,6"
+                                BorderBrush="#22FFFFFF"
+                                BorderThickness="1">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked"
+                                     Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="#334A9EFF"/>
+                                <Setter TargetName="bd"
+                                        Property="BorderBrush"
+                                        Value="{StaticResource AccentBlue}"/>
+                                <Setter Property="Foreground"
+                                        Value="{StaticResource TextPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver"
+                                     Value="True">
+                                <Setter TargetName="bd"
+                                        Property="Background"
+                                        Value="#22FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Dark TextBox -->
+        <Style x:Key="DarkTextBox"
+               TargetType="TextBox">
+            <Setter Property="Background"
+                    Value="#22FFFFFF"/>
+            <Setter Property="Foreground"
+                    Value="{StaticResource TextPrimary}"/>
+            <Setter Property="BorderBrush"
+                    Value="#33FFFFFF"/>
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+            <Setter Property="FontSize"
+                    Value="11"/>
+            <Setter Property="FontFamily"
+                    Value="Segoe UI"/>
+            <Setter Property="Padding"
+                    Value="6,4"/>
+            <Setter Property="MinWidth"
+                    Value="260"/>
+            <Setter Property="HorizontalAlignment"
+                    Value="Left"/>
+            <Setter Property="Margin"
+                    Value="0,3,0,0"/>
+            <Setter Property="CaretBrush"
+                    Value="White"/>
+        </Style>
+
         <!-- History item template as chat bubbles -->
         <DataTemplate x:Key="HistoryItemTemplate">
             <Grid Margin="12,4">
@@ -315,277 +470,106 @@
                 </StackPanel>
             </Grid>
 
-            <!-- ═══ ROW 1: SETTINGS PANEL ═══ -->
+            <!-- ═══ ROW 1: SETTINGS PANEL (Tabs) ═══ -->
             <Border Grid.Row="1"
                     Background="{StaticResource BarBgSolid}"
                     Visibility="{Binding IsSettingsVisible, Converter={StaticResource BoolToVis}}"
-                    Padding="14,10"
                     BorderBrush="#22FFFFFF"
                     BorderThickness="0,1,0,0">
-                <StackPanel>
-                    <!-- ── MODE SELECTOR ── -->
-                    <TextBlock Text="M O D O   D E   O P E R A Ç Ã O"
-                               Foreground="{StaticResource AccentGreen}"
-                               FontSize="10"
-                               FontWeight="Bold"
-                               FontFamily="Segoe UI"
-                               Margin="0,0,0,8"/>
+                <TabControl Style="{StaticResource DarkTabControl}">
 
-                    <StackPanel Orientation="Horizontal"
-                                Margin="0,0,0,4">
-                        <RadioButton GroupName="ApiMode"
-                                     IsChecked="{Binding IsVoiceMode}"
-                                     VerticalAlignment="Center"
-                                     Foreground="{StaticResource TextPrimary}"
-                                     Margin="0,0,16,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="🎙️ Voz"
-                                           Foreground="{StaticResource TextPrimary}"
-                                           FontSize="12"
-                                           FontFamily="Segoe UI"
-                                           FontWeight="SemiBold"/>
-                            </StackPanel>
-                        </RadioButton>
-                        <RadioButton GroupName="ApiMode"
-                                     IsChecked="{Binding IsTranscriptionMode}"
-                                     VerticalAlignment="Center"
-                                     Foreground="{StaticResource TextPrimary}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="📝 Transcrição"
-                                           Foreground="{StaticResource TextPrimary}"
-                                           FontSize="12"
-                                           FontFamily="Segoe UI"
-                                           FontWeight="SemiBold"/>
-                            </StackPanel>
-                        </RadioButton>
-                    </StackPanel>
-                    <TextBlock Text="{Binding ModeDescription}"
-                               Foreground="{StaticResource TextSecondary}"
-                               FontSize="10"
-                               FontFamily="Segoe UI"
-                               FontStyle="Italic"
-                               Margin="0,0,0,12"
-                               TextWrapping="Wrap"/>
-
-                    <!-- ── AUDIO DEVICES ── -->
-                    <TextBlock Text="C O N F I G U R A Ç Õ E S   D E   Á U D I O"
-                               Foreground="{StaticResource AccentBlue}"
-                               FontSize="10"
-                               FontWeight="Bold"
-                               FontFamily="Segoe UI"
-                               Margin="0,0,0,8"/>
-
-                    <!-- Mic device -->
-                    <Grid Margin="0,0,0,6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <CheckBox Grid.Column="0"
-                                  IsChecked="{Binding UseMic}"
-                                  VerticalAlignment="Center"
-                                  Foreground="{StaticResource TextPrimary}"
-                                  Margin="0,0,8,0"/>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="🎤 Meu Microfone (sua voz → traduz PT→EN)"
-                                       Foreground="{StaticResource TextPrimary}"
-                                       FontSize="12"
-                                       FontFamily="Segoe UI"/>
-                            <ComboBox ItemsSource="{Binding MicDevices}"
-                                      SelectedItem="{Binding SelectedMicDevice}"
-                                      FontSize="11"
-                                      Margin="0,4,0,0"
-                                      MaxWidth="400"
-                                      HorizontalAlignment="Left"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Loopback device -->
-                    <Grid Margin="0,0,0,6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <CheckBox Grid.Column="0"
-                                  IsChecked="{Binding UseLoopback}"
-                                  VerticalAlignment="Center"
-                                  Foreground="{StaticResource TextPrimary}"
-                                  Margin="0,0,8,0"/>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="🔊 Áudio do Sistema (Meet/Teams → traduz EN→PT)"
-                                       Foreground="{StaticResource TextPrimary}"
-                                       FontSize="12"
-                                       FontFamily="Segoe UI"/>
-                            <ComboBox ItemsSource="{Binding LoopbackDevices}"
-                                      SelectedItem="{Binding SelectedLoopbackDevice}"
-                                      FontSize="11"
-                                      Margin="0,4,0,0"
-                                      MaxWidth="400"
-                                      HorizontalAlignment="Left"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Refresh button -->
-                    <Button Style="{StaticResource BarButton}"
-                            Content="🔄 Atualizar dispositivos"
-                            Click="RefreshDevices_Click"
-                            HorizontalAlignment="Left"
-                            Margin="0,4,0,0"
-                            Foreground="{StaticResource AccentBlue}"
-                            FontSize="11"/>
-
-                    <!-- ── INTÉRPRETE ATIVO ── -->
-                    <Border BorderBrush="#33FFAA00"
-                            BorderThickness="0,1,0,0"
-                            Margin="0,12,0,0"
-                            Padding="0,10,0,0">
-                        <StackPanel>
-                            <TextBlock Text="I N T É R P R E T E   A T I V O   ( P T → E N )"
-                                       Foreground="{StaticResource AccentGold}"
-                                       FontSize="10"
-                                       FontWeight="Bold"
-                                       FontFamily="Segoe UI"
-                                       Margin="0,0,0,4"/>
-                            <TextBlock Text="Fale em português e a IA fala em inglês no dispositivo escolhido."
-                                       Foreground="{StaticResource TextSecondary}"
-                                       FontSize="10"
-                                       FontFamily="Segoe UI"
-                                       FontStyle="Italic"
-                                       Margin="0,0,0,8"
-                                       TextWrapping="Wrap"/>
-
-                            <TextBlock Text="P R O V E D O R   D O   I N T E R P R E T E"
-                                       Foreground="{StaticResource AccentGold}"
-                                       FontSize="9"
-                                       FontWeight="Bold"
-                                       FontFamily="Segoe UI"
-                                       Margin="0,0,0,6"/>
-
+                    <!-- ── TAB: GERAL ── -->
+                    <TabItem Header="Geral"
+                             Style="{StaticResource DarkTabItem}">
+                        <StackPanel Margin="14,12">
+                            <!-- Modo -->
                             <StackPanel Orientation="Horizontal"
-                                        Margin="0,0,0,4">
-                                <RadioButton GroupName="InterpreterProvider"
-                                             IsChecked="{Binding IsOpenAiInterpreterProvider}"
-                                             VerticalAlignment="Center"
-                                             Foreground="{StaticResource TextPrimary}"
-                                             Margin="0,0,16,0">
-                                    <TextBlock Text="OpenAI"
-                                               Foreground="{StaticResource TextPrimary}"
-                                               FontSize="12"
-                                               FontFamily="Segoe UI"
-                                               FontWeight="SemiBold"/>
-                                </RadioButton>
-                                <RadioButton GroupName="InterpreterProvider"
-                                             IsChecked="{Binding IsAzureInterpreterProvider}"
-                                             VerticalAlignment="Center"
-                                             Foreground="{StaticResource TextPrimary}">
-                                    <TextBlock Text="Azure Speech"
-                                               Foreground="{StaticResource TextPrimary}"
-                                               FontSize="12"
-                                               FontFamily="Segoe UI"
-                                               FontWeight="SemiBold"/>
-                                </RadioButton>
+                                        Margin="0,0,0,6">
+                                <RadioButton GroupName="ApiMode"
+                                             IsChecked="{Binding IsVoiceMode}"
+                                             Style="{StaticResource PillRadio}"
+                                             Content="🎙️ Voz"/>
+                                <RadioButton GroupName="ApiMode"
+                                             IsChecked="{Binding IsTranscriptionMode}"
+                                             Style="{StaticResource PillRadio}"
+                                             Content="📝 Transcrição"/>
                             </StackPanel>
-
-                            <TextBlock Text="{Binding InterpreterProviderDescription}"
+                            <TextBlock Text="{Binding ModeDescription}"
                                        Foreground="{StaticResource TextSecondary}"
                                        FontSize="10"
                                        FontFamily="Segoe UI"
                                        FontStyle="Italic"
-                                       Margin="0,0,0,10"
-                                       TextWrapping="Wrap"/>
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,14"/>
 
-                            <Border BorderBrush="#22FFFFFF"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,10"
-                                    Visibility="{Binding ShowOpenAiInterpreterSettings, Converter={StaticResource BoolToVis}}">
-                                <StackPanel>
-                                    <TextBlock Text="OpenAI"
+                            <!-- Microfone -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Column="0"
+                                          IsChecked="{Binding UseMic}"
+                                          VerticalAlignment="Top"
+                                          Margin="0,2,8,0"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="🎤 Microfone (PT→EN)"
                                                Foreground="{StaticResource TextPrimary}"
-                                               FontSize="11"
-                                               FontFamily="Segoe UI"
-                                               FontWeight="SemiBold"/>
-                                    <TextBlock Text="Usa a implementacao atual do SpeakTranslateService. A credencial continua vindo de OPENAI_API_KEY no .env."
-                                               Foreground="{StaticResource TextSecondary}"
-                                               FontSize="10"
-                                               FontFamily="Segoe UI"
-                                               Margin="0,4,0,0"
-                                               TextWrapping="Wrap"/>
+                                               FontSize="12"
+                                               FontFamily="Segoe UI"/>
+                                    <ComboBox ItemsSource="{Binding MicDevices}"
+                                              SelectedItem="{Binding SelectedMicDevice}"
+                                              Style="{StaticResource DarkComboBox}"/>
                                 </StackPanel>
-                            </Border>
+                            </Grid>
 
-                            <Border BorderBrush="#224A9EFF"
-                                    BorderThickness="1"
-                                    CornerRadius="6"
-                                    Padding="10,8"
-                                    Margin="0,0,0,10"
-                                    Visibility="{Binding ShowAzureInterpreterSettings, Converter={StaticResource BoolToVis}}">
-                                <StackPanel>
-                                    <TextBlock Text="Azure Speech"
-                                               Foreground="{StaticResource AccentBlue}"
-                                               FontSize="11"
-                                               FontFamily="Segoe UI"
-                                               FontWeight="SemiBold"
-                                               Margin="0,0,0,6"/>
-
-                                    <TextBlock Text="Speech Key"
+                            <!-- Loopback -->
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Column="0"
+                                          IsChecked="{Binding UseLoopback}"
+                                          VerticalAlignment="Top"
+                                          Margin="0,2,8,0"/>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="🔊 Áudio do Sistema (EN→PT)"
                                                Foreground="{StaticResource TextPrimary}"
-                                               FontSize="11"
+                                               FontSize="12"
                                                FontFamily="Segoe UI"/>
-                                    <TextBox Text="{Binding AzureSpeechKey, UpdateSourceTrigger=PropertyChanged}"
-                                             FontSize="11"
-                                             Margin="0,4,0,8"
-                                             MinWidth="280"
-                                             HorizontalAlignment="Left"/>
-
-                                    <TextBlock Text="Speech Region"
-                                               Foreground="{StaticResource TextPrimary}"
-                                               FontSize="11"
-                                               FontFamily="Segoe UI"/>
-                                    <TextBox Text="{Binding AzureSpeechRegion, UpdateSourceTrigger=PropertyChanged}"
-                                             FontSize="11"
-                                             Margin="0,4,0,8"
-                                             MinWidth="280"
-                                             HorizontalAlignment="Left"/>
-
-                                    <TextBlock Text="Voice"
-                                               Foreground="{StaticResource TextPrimary}"
-                                               FontSize="11"
-                                               FontFamily="Segoe UI"/>
-                                    <TextBox Text="{Binding AzureSpeechVoice, UpdateSourceTrigger=PropertyChanged}"
-                                             FontSize="11"
-                                             Margin="0,4,0,0"
-                                             MinWidth="280"
-                                             HorizontalAlignment="Left"/>
-
-                                    <TextBlock Text="Exemplo: en-US-JennyNeural, en-US-AriaNeural, en-US-Ava:DragonHDLatestNeural"
-                                               Foreground="{StaticResource TextSecondary}"
-                                               FontSize="9"
-                                               FontFamily="Segoe UI"
-                                               Margin="0,4,0,0"
-                                               TextWrapping="Wrap"/>
+                                    <ComboBox ItemsSource="{Binding LoopbackDevices}"
+                                              SelectedItem="{Binding SelectedLoopbackDevice}"
+                                              Style="{StaticResource DarkComboBox}"/>
                                 </StackPanel>
-                            </Border>
+                            </Grid>
 
-                            <!-- Enable toggle -->
+                            <Button Style="{StaticResource BarButton}"
+                                    Content="🔄 Atualizar dispositivos"
+                                    Click="RefreshDevices_Click"
+                                    HorizontalAlignment="Left"
+                                    Foreground="{StaticResource AccentBlue}"
+                                    FontSize="11"/>
+                        </StackPanel>
+                    </TabItem>
+
+                    <!-- ── TAB: INTÉRPRETE ── -->
+                    <TabItem Header="Intérprete"
+                             Style="{StaticResource DarkTabItem}">
+                        <StackPanel Margin="14,12">
+                            <!-- Habilitar -->
                             <CheckBox IsChecked="{Binding IsSpeakFeatureEnabled}"
-                                      VerticalAlignment="Center"
-                                      Foreground="{StaticResource TextPrimary}"
-                                      Margin="0,0,0,8">
-                                <TextBlock Text="Habilitar Intérprete Ativo"
+                                      Margin="0,0,0,10">
+                                <TextBlock Text="Habilitar Intérprete (PT→EN)"
                                            Foreground="{StaticResource TextPrimary}"
                                            FontSize="12"
                                            FontFamily="Segoe UI"
                                            FontWeight="SemiBold"/>
                             </CheckBox>
 
-                            <!-- Config (visible when enabled) -->
                             <StackPanel Visibility="{Binding IsSpeakFeatureEnabled, Converter={StaticResource BoolToVis}}">
-                                <!-- Mic for speaking -->
-                                <Grid Margin="0,0,0,6">
+                                <!-- Mic do intérprete -->
+                                <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
@@ -596,21 +580,18 @@
                                                VerticalAlignment="Center"
                                                Margin="0,0,8,0"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="Microfone (sua voz em PT-BR)"
+                                        <TextBlock Text="Microfone (PT-BR)"
                                                    Foreground="{StaticResource TextPrimary}"
                                                    FontSize="12"
                                                    FontFamily="Segoe UI"/>
                                         <ComboBox ItemsSource="{Binding MicDevices}"
                                                   SelectedItem="{Binding SelectedSpeakMicDevice}"
-                                                  FontSize="11"
-                                                  Margin="0,4,0,0"
-                                                  MaxWidth="400"
-                                                  HorizontalAlignment="Left"/>
+                                                  Style="{StaticResource DarkComboBox}"/>
                                     </StackPanel>
                                 </Grid>
 
-                                <!-- Output device -->
-                                <Grid Margin="0,0,0,6">
+                                <!-- Saída do intérprete -->
+                                <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
@@ -621,20 +602,17 @@
                                                VerticalAlignment="Center"
                                                Margin="0,0,8,0"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="Saída de áudio EN (ex: VB-Cable, alto-falante)"
+                                        <TextBlock Text="Saída de áudio (EN)"
                                                    Foreground="{StaticResource TextPrimary}"
                                                    FontSize="12"
                                                    FontFamily="Segoe UI"/>
                                         <ComboBox ItemsSource="{Binding SpeakOutputDevices}"
                                                   SelectedItem="{Binding SelectedSpeakOutputDevice}"
-                                                  FontSize="11"
-                                                  Margin="0,4,0,0"
-                                                  MaxWidth="400"
-                                                  HorizontalAlignment="Left"/>
+                                                  Style="{StaticResource DarkComboBox}"/>
                                     </StackPanel>
                                 </Grid>
 
-                                <!-- Connect/Disconnect speak -->
+                                <!-- Botão conectar -->
                                 <Button Style="{StaticResource BarButton}"
                                         Click="ToggleSpeak_Click"
                                         HorizontalAlignment="Left"
@@ -670,19 +648,19 @@
                                            FontFamily="Segoe UI"
                                            Margin="0,4,0,0"/>
 
-                                <!-- Warning — dinâmico baseado na seleção de dispositivos -->
+                                <!-- Warning -->
                                 <TextBlock Foreground="#99FFAA00"
                                            FontSize="9"
                                            FontFamily="Segoe UI"
                                            FontStyle="Italic"
-                                           Margin="0,8,0,0"
+                                           Margin="0,6,0,0"
                                            TextWrapping="Wrap"
                                            Text="{Binding SpeakDeviceWarning}"
                                            Visibility="{Binding HasSpeakDeviceWarning, Converter={StaticResource BoolToVis}}"/>
                             </StackPanel>
                         </StackPanel>
-                    </Border>
-                </StackPanel>
+                    </TabItem>
+                </TabControl>
             </Border>
 
             <!-- ═══ ROW 2: HISTORY / CHAT DRAWER ═══ -->
@@ -771,50 +749,14 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <!-- Typing indicator + input bar -->
-                    <Grid Grid.Row="2"
-                          Margin="12,4,12,10">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <!-- Typing indicator -->
-                        <TextBlock Grid.Row="0"
-                                   Text="Assistente digitando..."
-                                   Foreground="{StaticResource TextSecondary}"
-                                   FontSize="11"
-                                   FontFamily="Segoe UI"
-                                   Margin="0,0,0,4"
-                                   Visibility="{Binding IsAssistantTyping, Converter={StaticResource BoolToVis}}"/>
-
-                        <!-- Input row -->
-                        <Grid Grid.Row="1">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-
-                            <TextBox Grid.Column="0"
-                                     Text="{Binding InputText, UpdateSourceTrigger=PropertyChanged}"
-                                     FontSize="13"
-                                     FontFamily="Segoe UI"
-                                     Margin="0,0,8,0"
-                                     Padding="8,6"
-                                     VerticalContentAlignment="Center"
-                                     Background="#22FFFFFF"
-                                     Foreground="{StaticResource TextPrimary}"
-                                     BorderBrush="#44FFFFFF"
-                                     BorderThickness="1"/>
-
-                            <Button Grid.Column="1"
-                                    Style="{StaticResource BarButton}"
-                                    Command="{Binding SendMessageCommand}"
-                                    Content="Enviar"
-                                    Padding="10,6"
-                                    Foreground="{StaticResource AccentBlue}"/>
-                        </Grid>
-                    </Grid>
+                    <!-- Typing indicator -->
+                    <TextBlock Grid.Row="2"
+                               Text="Traduzindo..."
+                               Foreground="{StaticResource TextSecondary}"
+                               FontSize="11"
+                               FontFamily="Segoe UI"
+                               Margin="12,4,12,8"
+                               Visibility="{Binding IsAssistantTyping, Converter={StaticResource BoolToVis}}"/>
                 </Grid>
             </Border>
         </Grid>

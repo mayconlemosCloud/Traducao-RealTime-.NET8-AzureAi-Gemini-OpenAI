@@ -13,6 +13,8 @@ using MeetingTranslator.Models;
 using MeetingTranslator.Services.Common;
 using MeetingTranslator.Services.OpenAI;
 using MeetingTranslator.Services.Azure;
+using OpenAiVoiceService = MeetingTranslator.Services.OpenAI.VoiceTranslationService;
+using AzureVoiceService = MeetingTranslator.Services.Azure.VoiceTranslationService;
 using dotenv.net;
 
 namespace MeetingTranslator.ViewModels;
@@ -20,10 +22,13 @@ namespace MeetingTranslator.ViewModels;
 public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     // --- Estado dos serviços ---
-    private VoiceTranslationService? _voiceService;
+    private OpenAiVoiceService? _voiceService;
+    private AzureVoiceService? _azureVoiceService;
     private TextTranslationService? _transcriptionService;
+    private AzureTranscriptionService? _azureTranscriptionService;
     private IInterpreterService? _speakService;
     private readonly Dispatcher _dispatcher;
+    private bool _useAzureProvider;
 
     /// <summary>
     /// Estado compartilhado entre serviços para evitar cross-contamination de áudio.
@@ -350,6 +355,13 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         AzureSpeechKey = Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY") ?? "";
         AzureSpeechRegion = Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION") ?? "";
         AzureSpeechVoice = Environment.GetEnvironmentVariable("AZURE_SPEECH_VOICE") ?? "en-US-JennyNeural";
+
+        var provider = Environment.GetEnvironmentVariable("PROVIDER") ?? "openai";
+        _useAzureProvider = provider.Equals("azure", StringComparison.OrdinalIgnoreCase);
+
+        SelectedInterpreterProvider = _useAzureProvider
+            ? InterpreterProvider.AzureSpeech
+            : InterpreterProvider.OpenAI;
     }
 
     private void LoadDevices()
@@ -392,22 +404,34 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         LoadEnvironmentVariables();
 
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            StatusText = "⚠ OPENAI_API_KEY não encontrada";
-            return;
-        }
-
         try
         {
-            if (SelectedMode == TranslationMode.Voice)
+            if (_useAzureProvider)
             {
-                await ConnectVoiceModeAsync(apiKey);
+                if (string.IsNullOrWhiteSpace(AzureSpeechKey) || string.IsNullOrWhiteSpace(AzureSpeechRegion))
+                {
+                    StatusText = "⚠ AZURE_SPEECH_KEY/REGION não configuradas no .env";
+                    return;
+                }
+
+                if (SelectedMode == TranslationMode.Voice)
+                    await ConnectAzureVoiceModeAsync();
+                else
+                    await ConnectAzureTranscriptionAsync();
             }
             else
             {
-                await ConnectTranscriptionModeAsync(apiKey);
+                var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+                if (string.IsNullOrWhiteSpace(apiKey))
+                {
+                    StatusText = "⚠ OPENAI_API_KEY não encontrada";
+                    return;
+                }
+
+                if (SelectedMode == TranslationMode.Voice)
+                    await ConnectVoiceModeAsync(apiKey);
+                else
+                    await ConnectTranscriptionModeAsync(apiKey);
             }
 
             IsConnected = true;
@@ -421,7 +445,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task ConnectVoiceModeAsync(string apiKey)
     {
-        _voiceService = new VoiceTranslationService(apiKey, _sharedAudioState);
+        _voiceService = new OpenAiVoiceService(apiKey, _sharedAudioState);
 
         _voiceService.TranscriptReceived += OnTranscriptReceived;
         _voiceService.StatusChanged += OnStatusChanged;
@@ -453,6 +477,40 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         );
     }
 
+    private async Task ConnectAzureTranscriptionAsync()
+    {
+        _azureTranscriptionService = new AzureTranscriptionService(AzureSpeechKey, AzureSpeechRegion);
+
+        _azureTranscriptionService.TranscriptReceived += OnTranscriptReceived;
+        _azureTranscriptionService.StatusChanged += OnStatusChanged;
+        _azureTranscriptionService.ErrorOccurred += OnError;
+        _azureTranscriptionService.AnalyzingChanged += OnAnalyzingChanged;
+
+        await _azureTranscriptionService.StartAsync(
+            SelectedMicDevice?.DeviceIndex ?? 0,
+            SelectedLoopbackDevice?.DeviceIndex ?? 0,
+            UseMic,
+            UseLoopback
+        );
+    }
+
+    private async Task ConnectAzureVoiceModeAsync()
+    {
+        _azureVoiceService = new AzureVoiceService(AzureSpeechKey, AzureSpeechRegion, _sharedAudioState);
+
+        _azureVoiceService.TranscriptReceived += OnTranscriptReceived;
+        _azureVoiceService.StatusChanged += OnStatusChanged;
+        _azureVoiceService.ErrorOccurred += OnError;
+        _azureVoiceService.AnalyzingChanged += OnAnalyzingChanged;
+
+        await _azureVoiceService.StartAsync(
+            SelectedMicDevice?.DeviceIndex ?? 0,
+            SelectedLoopbackDevice?.DeviceIndex ?? 0,
+            UseMic,
+            UseLoopback
+        );
+    }
+
     private async Task DisconnectAsync()
     {
         if (_voiceService != null)
@@ -477,6 +535,30 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             await _transcriptionService.StopAsync();
             _transcriptionService.Dispose();
             _transcriptionService = null;
+        }
+
+        if (_azureVoiceService != null)
+        {
+            _azureVoiceService.TranscriptReceived -= OnTranscriptReceived;
+            _azureVoiceService.StatusChanged -= OnStatusChanged;
+            _azureVoiceService.ErrorOccurred -= OnError;
+            _azureVoiceService.AnalyzingChanged -= OnAnalyzingChanged;
+
+            await _azureVoiceService.StopAsync();
+            _azureVoiceService.Dispose();
+            _azureVoiceService = null;
+        }
+
+        if (_azureTranscriptionService != null)
+        {
+            _azureTranscriptionService.TranscriptReceived -= OnTranscriptReceived;
+            _azureTranscriptionService.StatusChanged -= OnStatusChanged;
+            _azureTranscriptionService.ErrorOccurred -= OnError;
+            _azureTranscriptionService.AnalyzingChanged -= OnAnalyzingChanged;
+
+            await _azureTranscriptionService.StopAsync();
+            _azureTranscriptionService.Dispose();
+            _azureTranscriptionService = null;
         }
 
         IsConnected = false;
@@ -873,6 +955,16 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             _transcriptionService.AnalyzingChanged -= OnAnalyzingChanged;
             _transcriptionService.Dispose();
             _transcriptionService = null;
+        }
+
+        if (_azureTranscriptionService != null)
+        {
+            _azureTranscriptionService.TranscriptReceived -= OnTranscriptReceived;
+            _azureTranscriptionService.StatusChanged -= OnStatusChanged;
+            _azureTranscriptionService.ErrorOccurred -= OnError;
+            _azureTranscriptionService.AnalyzingChanged -= OnAnalyzingChanged;
+            _azureTranscriptionService.Dispose();
+            _azureTranscriptionService = null;
         }
 
         if (_speakService != null)
