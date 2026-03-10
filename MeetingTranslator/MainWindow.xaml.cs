@@ -104,6 +104,17 @@ public partial class MainWindow : Window
         await _vm.ToggleSpeakConnectionAsync();
     }
 
+    private async void ListAzureVoices_Click(object sender, RoutedEventArgs e)
+    {
+        // Load all locales; could filter later by UI
+        await _vm.LoadAzureVoicesAsync();
+    }
+
+    private async void PreviewAzureVoice_Click(object sender, RoutedEventArgs e)
+    {
+        await _vm.PreviewSelectedAzureVoiceAsync();
+    }
+
     private void Close_Click(object sender, RoutedEventArgs e)
     {
         _vm.Dispose();

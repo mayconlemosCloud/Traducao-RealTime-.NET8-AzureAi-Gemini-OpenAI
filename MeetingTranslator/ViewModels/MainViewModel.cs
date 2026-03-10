@@ -17,6 +17,7 @@ using OpenAiVoiceService = MeetingTranslator.Services.OpenAI.VoiceTranslationSer
 using AzureVoiceService = MeetingTranslator.Services.Azure.VoiceTranslationService;
 using dotenv.net;
 using System.Linq;
+using System.Windows.Data;
 
 namespace MeetingTranslator.ViewModels;
 
@@ -247,7 +248,52 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     public string AzureSpeechVoice
     {
         get => _azureSpeechVoice;
-        set { _azureSpeechVoice = value; OnPropertyChanged(); }
+        set
+        {
+            _azureSpeechVoice = value;
+            OnPropertyChanged();
+            // Aplica imediatamente quando o valor muda pela UI
+            _ = ApplySelectedVoiceToActiveServicesAsync();
+        }
+    }
+
+    // Azure voices listing
+    private bool _isAzureBusy;
+    public bool IsAzureBusy
+    {
+        get => _isAzureBusy;
+        set { _isAzureBusy = value; OnPropertyChanged(); }
+    }
+
+    public ObservableCollection<AzureVoiceInfo> AzureVoices { get; } = new();
+    public ICollectionView AzureVoicesView { get; }
+
+    private string _azureVoiceFilter = string.Empty;
+    public string AzureVoiceFilter
+    {
+        get => _azureVoiceFilter;
+        set
+        {
+            _azureVoiceFilter = value ?? string.Empty;
+            OnPropertyChanged();
+            AzureVoicesView.Refresh();
+        }
+    }
+
+    private AzureVoiceInfo? _selectedAzureVoice;
+    public AzureVoiceInfo? SelectedAzureVoice
+    {
+        get => _selectedAzureVoice;
+        set
+        {
+            _selectedAzureVoice = value;
+            OnPropertyChanged();
+            if (value != null)
+            {
+                AzureSpeechVoice = value.ShortName;
+                _ = ApplySelectedVoiceToActiveServicesAsync();
+            }
+        }
     }
 
     private bool _isSpeakConnected;
@@ -373,8 +419,26 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         LoadDevices();
         SendMessageCommand = new DelegateCommand(_ => SendMessage(), _ => !string.IsNullOrWhiteSpace(InputText));
         _logWriterTask = Task.Run(RunLogWriter);
+
+        // View filtrável para as vozes do Azure
+        AzureVoicesView = CollectionViewSource.GetDefaultView(AzureVoices);
+        AzureVoicesView.Filter = o =>
+        {
+            if (string.IsNullOrWhiteSpace(_azureVoiceFilter)) return true;
+            if (o is not AzureVoiceInfo v) return false;
+            string Norm(string s) => new string((s ?? "").Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+            var f = Norm(_azureVoiceFilter);
+            return Norm(v.ShortName).Contains(f)
+                   || Norm(v.LocalName).Contains(f)
+                   || Norm(v.Locale).Contains(f)
+                   || Norm(v.Gender).Contains(f);
+        };
+
+        // Carrega vozes do Azure automaticamente focando em pt-BR (usando .env)
+        _ = Task.Run(() => LoadAzureVoicesAsync("pt-BR"));
     }
 
+    private bool _envInitialized;
     private void LoadEnvironmentVariables()
     {
         var exeDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -386,7 +450,10 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
         AzureSpeechKey = Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY") ?? "";
         AzureSpeechRegion = Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION") ?? "";
-        AzureSpeechVoice = Environment.GetEnvironmentVariable("AZURE_SPEECH_VOICE") ?? "en-US-JennyNeural";
+        if (!_envInitialized && string.IsNullOrWhiteSpace(AzureSpeechVoice))
+        {
+            AzureSpeechVoice = Environment.GetEnvironmentVariable("AZURE_SPEECH_VOICE") ?? "en-US-JennyNeural";
+        }
 
         var provider = Environment.GetEnvironmentVariable("PROVIDER") ?? "openai";
         _useAzureProvider = provider.Equals("azure", StringComparison.OrdinalIgnoreCase);
@@ -394,6 +461,8 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         SelectedInterpreterProvider = _useAzureProvider
             ? InterpreterProvider.AzureSpeech
             : InterpreterProvider.OpenAI;
+
+        _envInitialized = true;
     }
 
     private void LoadDevices()
@@ -562,6 +631,15 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     private async Task ConnectAzureVoiceModeAsync()
     {
         _azureVoiceService = new AzureVoiceService(AzureSpeechKey, AzureSpeechRegion, _sharedAudioState);
+
+        // Força EN -> PT-BR para ambos os fluxos (requisito da Entrada)
+        _azureVoiceService.SetDirections("en-US", "pt-BR", "en-US", "pt-BR");
+
+        // Aplica a voz selecionada para ambos (independe de qual entrada foi escolhida)
+        if (!string.IsNullOrWhiteSpace(AzureSpeechVoice))
+        {
+            _azureVoiceService.SetBothVoices(AzureSpeechVoice);
+        }
 
         _azureVoiceService.TranscriptReceived += OnTranscriptReceived;
         _azureVoiceService.StatusChanged += OnStatusChanged;
@@ -771,6 +849,126 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
             _logChannel.Writer.TryWrite(("error.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [SpeakStart] {ex}"));
             SpeakStatusText = $"⚠ Erro ao iniciar intérprete: {detailedMessage}";
+        }
+    }
+
+    // --- Azure voices: load + preview ---
+    public async Task LoadAzureVoicesAsync(string? localeFilter = null)
+    {
+        try
+        {
+            IsAzureBusy = true;
+
+            var speechKey = string.IsNullOrWhiteSpace(AzureSpeechKey)
+                ? Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY")
+                : AzureSpeechKey;
+            var speechRegion = string.IsNullOrWhiteSpace(AzureSpeechRegion)
+                ? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION")
+                : AzureSpeechRegion;
+
+            if (string.IsNullOrWhiteSpace(speechKey) || string.IsNullOrWhiteSpace(speechRegion))
+            {
+                SpeakStatusText = "⚠ Configure AZURE_SPEECH_KEY e AZURE_SPEECH_REGION";
+                return;
+            }
+
+            var list = await Services.Azure.AzureVoiceCatalogService
+                .GetVoicesAsync(speechKey!, speechRegion!, localeFilter ?? string.Empty)
+                .ConfigureAwait(false);
+
+            await _dispatcher.InvokeAsync(() =>
+            {
+                AzureVoices.Clear();
+                foreach (var v in list)
+                    AzureVoices.Add(v);
+
+                // Atualiza view para aplicar filtro atual
+                AzureVoicesView.Refresh();
+
+                // Auto-select if current voice matches
+                if (!string.IsNullOrWhiteSpace(AzureSpeechVoice))
+                {
+                    var match = AzureVoices.FirstOrDefault(v => v.ShortName.Equals(AzureSpeechVoice, StringComparison.OrdinalIgnoreCase));
+                    if (match != null)
+                        SelectedAzureVoice = match;
+                }
+
+                StatusText = $"Vozes Azure: {AzureVoices.Count}";
+            });
+        }
+        catch (Exception ex)
+        {
+            SpeakStatusText = $"⚠ Erro ao listar vozes: {ex.Message}";
+        }
+        finally
+        {
+            IsAzureBusy = false;
+        }
+    }
+
+    public async Task PreviewSelectedAzureVoiceAsync()
+    {
+        var voice = SelectedAzureVoice?.ShortName ?? AzureSpeechVoice;
+        if (string.IsNullOrWhiteSpace(voice))
+        {
+            SpeakStatusText = "⚠ Selecione uma voz";
+            return;
+        }
+
+        var speechKey = string.IsNullOrWhiteSpace(AzureSpeechKey)
+            ? Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY")
+            : AzureSpeechKey;
+        var speechRegion = string.IsNullOrWhiteSpace(AzureSpeechRegion)
+            ? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION")
+            : AzureSpeechRegion;
+
+        if (string.IsNullOrWhiteSpace(speechKey) || string.IsNullOrWhiteSpace(speechRegion))
+        {
+            SpeakStatusText = "⚠ Configure AZURE_SPEECH_KEY e AZURE_SPEECH_REGION";
+            return;
+        }
+
+        try
+        {
+            IsAzureBusy = true;
+            await Services.Azure.AzureVoiceCatalogService
+                .PlayPreviewAsync(speechKey!, speechRegion!, voice!)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            SpeakStatusText = $"⚠ Erro na previa: {ex.Message}";
+        }
+        finally
+        {
+            IsAzureBusy = false;
+        }
+    }
+
+    private async Task ApplySelectedVoiceToActiveServicesAsync()
+    {
+        try
+        {
+            if (_azureVoiceService != null && !string.IsNullOrWhiteSpace(AzureSpeechVoice))
+            {
+                // Aplica para ambos para manter consistência
+                _azureVoiceService.SetBothVoices(AzureSpeechVoice);
+
+                if (IsConnected && _useAzureProvider && SelectedMode == TranslationMode.Voice)
+                {
+                    await _azureVoiceService.StopAsync().ConfigureAwait(false);
+                    await _azureVoiceService.StartAsync(
+                        SelectedMicDevice?.DeviceIndex ?? 0,
+                        SelectedLoopbackDevice?.DeviceIndex ?? 0,
+                        UseMic,
+                        UseLoopback
+                    ).ConfigureAwait(false);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"⚠ Erro ao aplicar voz: {ex.Message}";
         }
     }
 

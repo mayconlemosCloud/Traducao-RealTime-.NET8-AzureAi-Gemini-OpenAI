@@ -111,6 +111,36 @@ public sealed class VoiceTranslationService : IDisposable
         _loopVoice = Environment.GetEnvironmentVariable("AZURE_VOICE_LOOP_VOICE") ?? _loopVoice;
     }
 
+    // Permite configurar as vozes via UI antes de iniciar
+    public void SetMicVoice(string voiceShortName)
+    {
+        if (!string.IsNullOrWhiteSpace(voiceShortName))
+            _micVoice = voiceShortName;
+    }
+
+    public void SetLoopVoice(string voiceShortName)
+    {
+        if (!string.IsNullOrWhiteSpace(voiceShortName))
+            _loopVoice = voiceShortName;
+    }
+
+    // Define a mesma voz para ambos os fluxos (mic e sistema)
+    public void SetBothVoices(string voiceShortName)
+    {
+        if (string.IsNullOrWhiteSpace(voiceShortName)) return;
+        _micVoice = voiceShortName;
+        _loopVoice = voiceShortName;
+    }
+
+    // Força direções fixas (ex.: en-US -> pt-BR)
+    public void SetDirections(string micSrc, string micTgt, string loopSrc, string loopTgt)
+    {
+        if (!string.IsNullOrWhiteSpace(micSrc)) _micSourceLang = micSrc;
+        if (!string.IsNullOrWhiteSpace(micTgt)) _micTargetLang = micTgt;
+        if (!string.IsNullOrWhiteSpace(loopSrc)) _loopSourceLang = loopSrc;
+        if (!string.IsNullOrWhiteSpace(loopTgt)) _loopTargetLang = loopTgt;
+    }
+
     public void SetSharedAudioState(SharedAudioState state) => _sharedAudioState = state;
 
     public async Task StartAsync(int micDeviceIndex, int loopbackDeviceIndex, bool useMic, bool useLoopback)
@@ -137,6 +167,7 @@ public sealed class VoiceTranslationService : IDisposable
                 AttachHandlers(_micRecognizer, _micTargetLang);
                 StartMicCapture(micDeviceIndex);
                 await _micRecognizer.StartContinuousRecognitionAsync().ConfigureAwait(false);
+                StatusChanged?.Invoke(this, new StatusEventArgs { Message = $"Azure MIC: {_micSourceLang}→{_micTargetLang}, Voz={_micVoice}" });
             }
             catch (Exception ex)
             {
@@ -156,6 +187,7 @@ public sealed class VoiceTranslationService : IDisposable
                 AttachHandlers(_loopRecognizer, _loopTargetLang);
                 StartLoopbackCapture(loopbackDeviceIndex);
                 await _loopRecognizer.StartContinuousRecognitionAsync().ConfigureAwait(false);
+                StatusChanged?.Invoke(this, new StatusEventArgs { Message = $"Azure LOOP: {_loopSourceLang}→{_loopTargetLang}, Voz={_loopVoice}" });
             }
             catch (Exception ex)
             {
@@ -189,7 +221,8 @@ public sealed class VoiceTranslationService : IDisposable
         var cfg = SpeechTranslationConfig.FromSubscription(_speechKey, _speechRegion);
         cfg.SpeechRecognitionLanguage = srcLang;
         cfg.AddTargetLanguage(tgtLang);
-        cfg.VoiceName = voice;
+        cfg.VoiceName = voice; // primary API
+        cfg.SetProperty(PropertyId.SpeechServiceConnection_SynthVoice, voice); // explicit synth voice
         cfg.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Raw16Khz16BitMonoPcm);
         cfg.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "250");
         cfg.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "300");
