@@ -49,6 +49,9 @@ public sealed class AzureTranscriptionService : IDisposable
             var config = SpeechTranslationConfig.FromSubscription(_speechKey, _speechRegion);
             config.SpeechRecognitionLanguage = "pt-BR";
             config.AddTargetLanguage("en");
+            config.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "250");
+            config.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "300");
+            config.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "3");
 
             _micAudioConfig = ResolveMicrophoneAudioConfig(micDeviceIndex);
             _micRecognizer = new TranslationRecognizer(config, _micAudioConfig);
@@ -65,6 +68,9 @@ public sealed class AzureTranscriptionService : IDisposable
             var config = SpeechTranslationConfig.FromSubscription(_speechKey, _speechRegion);
             config.SpeechRecognitionLanguage = "en-US";
             config.AddTargetLanguage("pt");
+            config.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "250");
+            config.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "300");
+            config.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "3");
 
             // Loopback usa mic padrão — o áudio do sistema é roteado via virtual cable
             _loopbackAudioConfig = AudioConfig.FromDefaultMicrophoneInput();

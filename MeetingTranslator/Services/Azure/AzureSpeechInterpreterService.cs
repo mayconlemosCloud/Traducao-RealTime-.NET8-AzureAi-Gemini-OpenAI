@@ -94,6 +94,9 @@ public sealed class AzureSpeechInterpreterService : IInterpreterService
         _translationConfig.AddTargetLanguage(TargetLanguage);
         _translationConfig.VoiceName = _voiceName;
         _translationConfig.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Raw16Khz16BitMonoPcm);
+        _translationConfig.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "250");
+        _translationConfig.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "300");
+        _translationConfig.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "3");
 
         _audioInputConfig = CreateMicrophoneAudioConfig(micDeviceIndex);
         _recognizer = new TranslationRecognizer(_translationConfig, _audioInputConfig);

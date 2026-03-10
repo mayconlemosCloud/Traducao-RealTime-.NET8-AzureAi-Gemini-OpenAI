@@ -191,7 +191,9 @@ public sealed class VoiceTranslationService : IDisposable
         cfg.AddTargetLanguage(tgtLang);
         cfg.VoiceName = voice;
         cfg.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Raw16Khz16BitMonoPcm);
-        cfg.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "1500");
+        cfg.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "250");
+        cfg.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "300");
+        cfg.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "3");
         return cfg;
     }
 
@@ -450,3 +452,5 @@ public sealed class VoiceTranslationService : IDisposable
         _cts?.Dispose();
     }
 }
+
+// (helper removed)
