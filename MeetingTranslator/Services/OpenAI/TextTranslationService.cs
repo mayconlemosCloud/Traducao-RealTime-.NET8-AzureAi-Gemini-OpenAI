@@ -7,28 +7,22 @@ using System.Threading.Channels;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
 using MeetingTranslator.Models;
+using MeetingTranslator.Services.Common;
 
-namespace MeetingTranslator.Services;
+namespace MeetingTranslator.Services.OpenAI;
 
 /// <summary>
-/// Engine de transcrição e tradução em tempo real via OpenAI Realtime API.
-/// Usa gpt-4o-mini-realtime-preview com modalities=["text"]:
-/// - Server-side VAD detecta turnos de fala
-/// - O modelo transcreve E traduz para PT-BR num único passo via instructions
-/// - Sem chamada extra à Chat API
-/// - Sem saída de áudio (text-only)
+/// Transcrição e tradução em tempo real via OpenAI Realtime API (modo texto).
+/// Usa server-side VAD para detectar turnos de fala.
+/// O modelo transcreve e traduz para PT-BR, sem saída de áudio.
 /// </summary>
-public class TranscriptionService : IDisposable
+public class TextTranslationService : IDisposable
 {
-    // ─── CONFIG ────────────────────────────────────────────
     private const int SampleRate = 24000;
     private const int Channels = 1;
     private const int BitsPerSample = 16;
+    private const string WsUrl = "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini";
 
-    private const string WsUrl =
-        "wss://api.openai.com/v1/realtime?model=gpt-realtime-mini";
-
-    // ─── STATE ─────────────────────────────────────────────
     private ClientWebSocket? _ws;
     private CancellationTokenSource? _cts;
     private Channel<byte[]>? _sendChannel;
@@ -39,13 +33,11 @@ public class TranscriptionService : IDisposable
     private readonly string _apiKey;
     private readonly WaveFormat _waveFormat = new(SampleRate, BitsPerSample, Channels);
 
-    // ─── RESPONSE STATE ────────────────────────────────────
-    // Acumula texto de resposta do modelo (tradução) por resposta
+    // Acumula texto traduzido da resposta atual
     private readonly StringBuilder _currentResponseText = new(512);
-    // Acumula deltas de transcrição do áudio de entrada (original, tempo real)
+    // Acumula transcrição do áudio de entrada (original, por item)
     private readonly Dictionary<string, StringBuilder> _inputTranscriptBuffers = new();
 
-    // ─── EVENTS ────────────────────────────────────────────
     public event EventHandler<TranscriptEventArgs>? TranscriptReceived;
     public event EventHandler<StatusEventArgs>? StatusChanged;
     public event EventHandler<StatusEventArgs>? ErrorOccurred;
@@ -53,12 +45,11 @@ public class TranscriptionService : IDisposable
 
     public bool IsConnected => _ws?.State == WebSocketState.Open;
 
-    public TranscriptionService(string apiKey)
+    public TextTranslationService(string apiKey)
     {
         _apiKey = apiKey;
     }
 
-    // ─── START ─────────────────────────────────────────────
     public async Task StartAsync(int micDeviceIndex, int loopbackDeviceIndex, bool useMic, bool useLoopback)
     {
         _cts = new CancellationTokenSource();
@@ -71,7 +62,6 @@ public class TranscriptionService : IDisposable
         await _ws.ConnectAsync(new Uri(WsUrl), _cts.Token).ConfigureAwait(false);
         StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Conectado!" });
 
-        // ── Send channel (thread-safe, bounded) ──
         _sendChannel = Channel.CreateBounded<byte[]>(new BoundedChannelOptions(200)
         {
             SingleReader = true,
@@ -94,23 +84,17 @@ public class TranscriptionService : IDisposable
             }
         }, _cts.Token);
 
-        // ── Session update (realtime model, text-only) ──
-        // modalities=["text"] → sem saída de áudio, só texto
-        // instructions → o modelo transcreve e traduz para PT-BR diretamente
         var sessionUpdate = new
         {
             type = "session.update",
             session = new
             {
                 modalities = new[] { "text" },
-                instructions = @"You are a live transcription and translation engine. " +
-                               @"Listen to the audio, transcribe it, and output ONLY the translated text in Brazilian Portuguese. " +
-                               @"Do not add any explanation, prefix, or formatting. Output only the translated content.",
+                instructions = "You are a live transcription and translation engine. " +
+                               "Listen to the audio, transcribe it, and output ONLY the translated text in Brazilian Portuguese. " +
+                               "Do not add any explanation, prefix, or formatting. Output only the translated content.",
                 input_audio_format = "pcm16",
-                input_audio_transcription = new
-                {
-                    model = "gpt-4o-transcribe"
-                },
+                input_audio_transcription = new { model = "gpt-4o-transcribe" },
                 turn_detection = new
                 {
                     type = "server_vad",
@@ -122,39 +106,35 @@ public class TranscriptionService : IDisposable
         };
         QueueSend(sessionUpdate);
 
-        // ── Mic capture ──
         if (useMic)
-        {
-            _waveIn = new WaveInEvent
-            {
-                DeviceNumber = micDeviceIndex,
-                WaveFormat = _waveFormat,
-                BufferMilliseconds = 100
-            };
+            StartMicCapture(micDeviceIndex);
 
-            _waveIn.DataAvailable += (_, e) =>
-            {
-                if (_ws.State != WebSocketState.Open) return;
-                var base64 = Convert.ToBase64String(e.Buffer, 0, e.BytesRecorded);
-                QueueSend(new { type = "input_audio_buffer.append", audio = base64 });
-            };
-
-            _waveIn.StartRecording();
-        }
-
-        // ── Loopback capture ──
         if (useLoopback)
-        {
             StartLoopbackCapture(loopbackDeviceIndex);
-        }
 
         StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo..." });
-
-        // ── Receive loop ──
         _ = Task.Run(() => ReceiveLoopAsync(), _cts.Token);
     }
 
-    // ─── LOOPBACK ──────────────────────────────────────────
+    private void StartMicCapture(int deviceIndex)
+    {
+        _waveIn = new WaveInEvent
+        {
+            DeviceNumber = deviceIndex,
+            WaveFormat = _waveFormat,
+            BufferMilliseconds = 100
+        };
+
+        _waveIn.DataAvailable += (_, e) =>
+        {
+            if (_ws?.State != WebSocketState.Open) return;
+            var base64 = Convert.ToBase64String(e.Buffer, 0, e.BytesRecorded);
+            QueueSend(new { type = "input_audio_buffer.append", audio = base64 });
+        };
+
+        _waveIn.StartRecording();
+    }
+
     private void StartLoopbackCapture(int deviceIndex)
     {
         var enumerator = new MMDeviceEnumerator();
@@ -170,7 +150,7 @@ public class TranscriptionService : IDisposable
             if (_ws?.State != WebSocketState.Open) return;
             if (e.BytesRecorded == 0) return;
 
-            byte[] converted = ConvertAudioFormat(e.Buffer, e.BytesRecorded, loopbackFormat, _waveFormat);
+            byte[] converted = AudioHelper.ConvertAudioFormat(e.Buffer, e.BytesRecorded, loopbackFormat, _waveFormat);
             if (converted.Length == 0) return;
 
             var base64 = Convert.ToBase64String(converted);
@@ -180,28 +160,6 @@ public class TranscriptionService : IDisposable
         _loopbackCapture.StartRecording();
     }
 
-    [ThreadStatic] private static byte[]? _resampleBuffer;
-    [ThreadStatic] private static MemoryStream? _resampleMs;
-
-    private static byte[] ConvertAudioFormat(byte[] sourceBuffer, int bytesRecorded, WaveFormat sourceFormat, WaveFormat targetFormat)
-    {
-        using var sourceStream = new RawSourceWaveStream(sourceBuffer, 0, bytesRecorded, sourceFormat);
-        using var resampler = new MediaFoundationResampler(sourceStream, targetFormat);
-        resampler.ResamplerQuality = 60;
-
-        _resampleBuffer ??= new byte[4096];
-        var ms = _resampleMs ??= new MemoryStream(16384);
-        ms.SetLength(0);
-
-        int read;
-        while ((read = resampler.Read(_resampleBuffer, 0, _resampleBuffer.Length)) > 0)
-        {
-            ms.Write(_resampleBuffer, 0, read);
-        }
-        return ms.ToArray();
-    }
-
-    // ─── RECEIVE LOOP ──────────────────────────────────────
     private async Task ReceiveLoopAsync()
     {
         var recvBuffer = ArrayPool<byte>.Shared.Rent(128 * 1024);
@@ -233,7 +191,7 @@ public class TranscriptionService : IDisposable
 
                 try
                 {
-                    await ProcessEventAsync(eventType!, root);
+                    ProcessEvent(eventType!, root);
                 }
                 catch (Exception ex)
                 {
@@ -259,12 +217,10 @@ public class TranscriptionService : IDisposable
         }
     }
 
-    // ─── EVENT PROCESSING ──────────────────────────────────
-    private Task ProcessEventAsync(string eventType, JsonElement root)
+    private void ProcessEvent(string eventType, JsonElement root)
     {
         switch (eventType)
         {
-            // ── SESSION LIFECYCLE ──
             case "session.created":
                 StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Sessão criada" });
                 break;
@@ -273,7 +229,6 @@ public class TranscriptionService : IDisposable
                 StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Pronto — ouvindo..." });
                 break;
 
-            // ── VAD EVENTS ──
             case "input_audio_buffer.speech_started":
                 StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo fala..." });
                 break;
@@ -290,92 +245,38 @@ public class TranscriptionService : IDisposable
             case "input_audio_buffer.cleared":
                 break;
 
-            // ── INPUT AUDIO TRANSCRIPTION (tempo real, original) ──
-            // Aparece ENQUANTO a pessoa fala — transcreve o áudio de entrada em paralelo
             case "conversation.item.input_audio_transcription.delta":
-                {
-                    var itemId = root.TryGetProperty("item_id", out var id) ? id.GetString() ?? "" : "";
-                    var delta = root.TryGetProperty("delta", out var d) ? d.GetString() ?? "" : "";
-                    if (string.IsNullOrEmpty(delta)) break;
-
-                    if (!_inputTranscriptBuffers.TryGetValue(itemId, out var sb))
-                    {
-                        sb = new StringBuilder(256);
-                        _inputTranscriptBuffers[itemId] = sb;
-                    }
-                    sb.Append(delta);
-
-                    AnalyzingChanged?.Invoke(this, false);
-                    TranscriptReceived?.Invoke(this, new TranscriptEventArgs
-                    {
-                        Speaker = Speaker.Them,
-                        OriginalText = sb.ToString(),
-                        TranslatedText = sb.ToString(),
-                        IsPartial = true
-                    });
-                    break;
-                }
+                HandleInputTranscriptDelta(root);
+                break;
 
             case "conversation.item.input_audio_transcription.completed":
-                {
-                    var itemId = root.TryGetProperty("item_id", out var id) ? id.GetString() ?? "" : "";
-                    _inputTranscriptBuffers.Remove(itemId);
-                    break;
-                }
+                HandleInputTranscriptCompleted(root);
+                break;
 
-            // ── RESPONSE LIFECYCLE ──
             case "response.created":
                 _currentResponseText.Clear();
                 break;
 
-            // ── STREAMING TEXT DELTAS ──
-            // O modelo retorna texto traduzido incrementalmente
             case "response.text.delta":
-                {
-                    var delta = root.TryGetProperty("delta", out var d) ? d.GetString() ?? "" : "";
-                    if (string.IsNullOrEmpty(delta)) break;
+                HandleResponseTextDelta(root);
+                break;
 
-                    _currentResponseText.Append(delta);
-                    AnalyzingChanged?.Invoke(this, false);
-
-                    TranscriptReceived?.Invoke(this, new TranscriptEventArgs
-                    {
-                        Speaker = Speaker.Them,
-                        OriginalText = "",
-                        TranslatedText = _currentResponseText.ToString(),
-                        IsPartial = true
-                    });
-                    break;
-                }
-
-            // ── TEXT COMPLETE ──
             case "response.text.done":
-                {
-                    var text = root.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
-                    if (string.IsNullOrEmpty(text)) text = _currentResponseText.ToString();
-
-                    AnalyzingChanged?.Invoke(this, false);
-
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        TranscriptReceived?.Invoke(this, new TranscriptEventArgs
-                        {
-                            Speaker = Speaker.Them,
-                            OriginalText = "",
-                            TranslatedText = text,
-                            IsPartial = false
-                        });
-                    }
-
-                    StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo..." });
-                    break;
-                }
+                HandleResponseTextDone(root);
+                break;
 
             case "response.done":
                 AnalyzingChanged?.Invoke(this, false);
                 break;
 
-            // ── IGNORED ──
+            case "error":
+                var msg = root.TryGetProperty("error", out var err)
+                    ? err.TryGetProperty("message", out var m) ? m.GetString() ?? "Erro" : "Erro"
+                    : "Erro desconhecido";
+                ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = msg });
+                break;
+
+            // Eventos ignorados
             case "response.output_item.added":
             case "response.output_item.done":
             case "response.content_part.added":
@@ -384,33 +285,85 @@ public class TranscriptionService : IDisposable
             case "rate_limits.updated":
                 break;
 
-            // ── ERROR ──
-            case "error":
-                {
-                    var msg = root.TryGetProperty("error", out var err)
-                        ? err.TryGetProperty("message", out var m) ? m.GetString() ?? "Erro" : "Erro"
-                        : "Erro desconhecido";
-                    ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = msg });
-                    break;
-                }
-
-            // ── UNKNOWN ──
             default:
-                System.Diagnostics.Debug.WriteLine($"[TranscriptionService] Evento não tratado: {eventType}");
+                System.Diagnostics.Debug.WriteLine($"[TextTranslation] Evento não tratado: {eventType}");
                 break;
         }
-
-        return Task.CompletedTask;
     }
 
-    // ─── HELPERS ───────────────────────────────────────────
+    private void HandleInputTranscriptDelta(JsonElement root)
+    {
+        var itemId = root.TryGetProperty("item_id", out var id) ? id.GetString() ?? "" : "";
+        var delta = root.TryGetProperty("delta", out var d) ? d.GetString() ?? "" : "";
+        if (string.IsNullOrEmpty(delta)) return;
+
+        if (!_inputTranscriptBuffers.TryGetValue(itemId, out var sb))
+        {
+            sb = new StringBuilder(256);
+            _inputTranscriptBuffers[itemId] = sb;
+        }
+        sb.Append(delta);
+
+        AnalyzingChanged?.Invoke(this, false);
+        TranscriptReceived?.Invoke(this, new TranscriptEventArgs
+        {
+            Speaker = Speaker.Them,
+            OriginalText = sb.ToString(),
+            TranslatedText = sb.ToString(),
+            IsPartial = true
+        });
+    }
+
+    private void HandleInputTranscriptCompleted(JsonElement root)
+    {
+        var itemId = root.TryGetProperty("item_id", out var id) ? id.GetString() ?? "" : "";
+        _inputTranscriptBuffers.Remove(itemId);
+    }
+
+    private void HandleResponseTextDelta(JsonElement root)
+    {
+        var delta = root.TryGetProperty("delta", out var d) ? d.GetString() ?? "" : "";
+        if (string.IsNullOrEmpty(delta)) return;
+
+        _currentResponseText.Append(delta);
+        AnalyzingChanged?.Invoke(this, false);
+
+        TranscriptReceived?.Invoke(this, new TranscriptEventArgs
+        {
+            Speaker = Speaker.Them,
+            OriginalText = "",
+            TranslatedText = _currentResponseText.ToString(),
+            IsPartial = true
+        });
+    }
+
+    private void HandleResponseTextDone(JsonElement root)
+    {
+        var text = root.TryGetProperty("text", out var t) ? t.GetString() ?? "" : "";
+        if (string.IsNullOrEmpty(text)) text = _currentResponseText.ToString();
+
+        AnalyzingChanged?.Invoke(this, false);
+
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            TranscriptReceived?.Invoke(this, new TranscriptEventArgs
+            {
+                Speaker = Speaker.Them,
+                OriginalText = "",
+                TranslatedText = text,
+                IsPartial = false
+            });
+        }
+
+        StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Ouvindo..." });
+    }
+
     private void QueueSend(object evt)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(evt);
         _sendChannel?.Writer.TryWrite(bytes);
     }
 
-    // ─── STOP / DISPOSE ────────────────────────────────────
     public async Task StopAsync()
     {
         _cts?.Cancel();

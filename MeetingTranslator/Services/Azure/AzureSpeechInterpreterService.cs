@@ -1,13 +1,14 @@
 using System.Text;
 using System.Linq;
 using MeetingTranslator.Models;
+using MeetingTranslator.Services.Common;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
 using Microsoft.CognitiveServices.Speech.Translation;
 using NAudio.Wave;
 using NAudio.CoreAudioApi;
 
-namespace MeetingTranslator.Services;
+namespace MeetingTranslator.Services.Azure;
 
 /// <summary>
 /// Backend alternativo do interprete PT->EN usando Azure Speech Translation.
@@ -68,7 +69,7 @@ public sealed class AzureSpeechInterpreterService : IInterpreterService
             return;
 
         // Log detalhado dos dispositivos de entrada
-        var devices = RealtimeService.GetInputDevices();
+        var devices = AudioHelper.GetInputDevices();
         var logBuilder = new StringBuilder();
         logBuilder.AppendLine("Dispositivos de entrada detectados:");
         foreach (var dev in devices)
@@ -172,7 +173,7 @@ public sealed class AzureSpeechInterpreterService : IInterpreterService
     private AudioConfig CreateMicrophoneAudioConfig(int micDeviceIndex)
     {
         // 1) Pega seleção da UI (WaveIn)
-        var uiDevices = RealtimeService.GetInputDevices();
+        var uiDevices = AudioHelper.GetInputDevices();
         var selectedUiDevice = uiDevices.FirstOrDefault(d => d.DeviceIndex == micDeviceIndex);
 
         // 2) Enumera dispositivos de captura via WASAPI (compatível com Azure SDK)

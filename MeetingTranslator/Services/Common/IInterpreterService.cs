@@ -1,6 +1,6 @@
 using MeetingTranslator.Models;
 
-namespace MeetingTranslator.Services;
+namespace MeetingTranslator.Services.Common;
 
 public interface IInterpreterService : IDisposable
 {

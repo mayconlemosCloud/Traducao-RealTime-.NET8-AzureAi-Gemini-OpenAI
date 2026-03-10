@@ -10,26 +10,27 @@ using System.Windows.Threading;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using MeetingTranslator.Models;
-using MeetingTranslator.Services;
+using MeetingTranslator.Services.Common;
+using MeetingTranslator.Services.OpenAI;
+using MeetingTranslator.Services.Azure;
 using dotenv.net;
 
 namespace MeetingTranslator.ViewModels;
 
 public class MainViewModel : INotifyPropertyChanged, IDisposable
 {
-    private RealtimeService? _voiceService;
-    private TranscriptionService? _transcriptionService;
+    // --- Estado dos serviços ---
+    private VoiceTranslationService? _voiceService;
+    private TextTranslationService? _transcriptionService;
     private IInterpreterService? _speakService;
     private readonly Dispatcher _dispatcher;
 
-    // ─── COORDENAÇÃO ENTRE SERVIÇOS ────────────────────────
     /// <summary>
-    /// Estado compartilhado entre RealtimeService e SpeakTranslateService.
-    /// Previne cross-contamination de áudio entre os dois serviços.
+    /// Estado compartilhado entre serviços para evitar cross-contamination de áudio.
     /// </summary>
     private readonly SharedAudioState _sharedAudioState = new();
 
-    // ─── BINDABLE PROPERTIES ───────────────────────────────
+    // --- Propriedades de UI ---
     private string _subtitleText = "";
     public string SubtitleText
     {
@@ -68,10 +69,9 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     }
     public string MuteIcon => IsMuted ? "🔇" : "🎤";
 
-    // Guarda o estado original do mute do mic antes do app alterar,
-    // para restaurar quando o app fechar ou desmutar.
+    // Guarda o estado original do mute antes do app alterar
     private bool _wasMicMutedBefore;
-    private bool _micMuteManaged; // true quando o app gerencia o mute do mic
+    private bool _micMuteManaged;
 
     private bool _useMic = true;
     public bool UseMic
@@ -87,8 +87,8 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         set { _useLoopback = value; OnPropertyChanged(); }
     }
 
-    private ApiMode _selectedMode = ApiMode.Transcription;
-    public ApiMode SelectedMode
+    private TranslationMode _selectedMode = TranslationMode.Transcription;
+    public TranslationMode SelectedMode
     {
         get => _selectedMode;
         set
@@ -103,20 +103,20 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public bool IsVoiceMode
     {
-        get => _selectedMode == ApiMode.Voice;
-        set { if (value) SelectedMode = ApiMode.Voice; }
+        get => _selectedMode == TranslationMode.Voice;
+        set { if (value) SelectedMode = TranslationMode.Voice; }
     }
 
     public bool IsTranscriptionMode
     {
-        get => _selectedMode == ApiMode.Transcription;
-        set { if (value) SelectedMode = ApiMode.Transcription; }
+        get => _selectedMode == TranslationMode.Transcription;
+        set { if (value) SelectedMode = TranslationMode.Transcription; }
     }
 
     public string ModeDescription => _selectedMode switch
     {
-        ApiMode.Voice => "IA ouve, traduz e fala. Resultado após silêncio.",
-        ApiMode.Transcription => "Texto em tempo real enquanto fala. Tradução após cada frase.",
+        TranslationMode.Voice => "IA ouve, traduz e fala. Resultado após silêncio.",
+        TranslationMode.Transcription => "Texto em tempo real enquanto fala. Tradução após cada frase.",
         _ => ""
     };
 
@@ -176,7 +176,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // ─── INTÉRPRETE ATIVO ─────────────────────────────────
+    // --- Intérprete ---
     private bool _isSpeakFeatureEnabled;
     public bool IsSpeakFeatureEnabled
     {
@@ -281,9 +281,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     /// <summary>
-    /// Aviso quando o dispositivo de saída do intérprete é o mesmo que o loopback.
-    /// Isso causa cross-contamination: o loopback captura o áudio EN do intérprete
-    /// e o RealtimeService traduz de volta para PT, criando eco.
+    /// Aviso quando a saída do intérprete é o mesmo dispositivo que o loopback (causa eco).
     /// </summary>
     public string SpeakDeviceWarning
     {
@@ -304,22 +302,20 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public bool HasSpeakDeviceWarning => !string.IsNullOrEmpty(SpeakDeviceWarning);
 
-    // ─── COLLECTIONS ──────────────────────────────────────
+    // --- Coleções ---
     public ObservableCollection<AudioDeviceInfo> MicDevices { get; } = new();
     public ObservableCollection<AudioDeviceInfo> LoopbackDevices { get; } = new();
     public ObservableCollection<AudioDeviceInfo> SpeakOutputDevices { get; } = new();
     public ObservableCollection<ConversationEntry> History { get; } = new();
 
-    // partial transcript accumulator (texto completo atual da fala)
+    // Acumulador de transcript parcial
     private string _partialTranscript = "";
 
-    // ─── THROTTLE PARA PARTIAL TRANSCRIPTS ─────────────────
-    // Evita inundar o UI thread com atualizações a cada token
+    // Throttle para partial transcripts
     private volatile string? _pendingPartialText;
     private volatile bool _partialUpdateScheduled;
 
-    // ─── BATCHED LOG WRITER ────────────────────────────────
-    // Um único background writer para todos os logs — evita File.Open/Close por linha
+    // Log writer em background
     private static readonly string _logBasePath = AppDomain.CurrentDomain.BaseDirectory;
     private readonly Channel<(string FileName, string Line)> _logChannel =
         Channel.CreateBounded<(string, string)>(new BoundedChannelOptions(1000)
@@ -359,18 +355,18 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     private void LoadDevices()
     {
         MicDevices.Clear();
-        foreach (var d in RealtimeService.GetInputDevices())
+        foreach (var d in AudioHelper.GetInputDevices())
             MicDevices.Add(d);
 
         OnPropertyChanged(nameof(ShowOpenAiInterpreterSettings));
         OnPropertyChanged(nameof(ShowAzureInterpreterSettings));
 
         LoopbackDevices.Clear();
-        foreach (var d in RealtimeService.GetLoopbackDevices())
+        foreach (var d in AudioHelper.GetLoopbackDevices())
             LoopbackDevices.Add(d);
 
         SpeakOutputDevices.Clear();
-        foreach (var d in SpeakTranslateService.GetOutputDevices())
+        foreach (var d in AudioHelper.GetOutputDevices())
             SpeakOutputDevices.Add(d);
 
         if (MicDevices.Count > 0) SelectedMicDevice = MicDevices[0];
@@ -379,7 +375,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         if (SpeakOutputDevices.Count > 0) SelectedSpeakOutputDevice = SpeakOutputDevices[0];
     }
 
-    // ─── COMMANDS ──────────────────────────────────────────
+    // --- Comandos ---
     public async Task ToggleConnectionAsync()
     {
         if (IsConnected)
@@ -405,7 +401,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
         try
         {
-            if (SelectedMode == ApiMode.Voice)
+            if (SelectedMode == TranslationMode.Voice)
             {
                 await ConnectVoiceModeAsync(apiKey);
             }
@@ -425,7 +421,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task ConnectVoiceModeAsync(string apiKey)
     {
-        _voiceService = new RealtimeService(apiKey, _sharedAudioState);
+        _voiceService = new VoiceTranslationService(apiKey, _sharedAudioState);
 
         _voiceService.TranscriptReceived += OnTranscriptReceived;
         _voiceService.StatusChanged += OnStatusChanged;
@@ -442,7 +438,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private async Task ConnectTranscriptionModeAsync(string apiKey)
     {
-        _transcriptionService = new TranscriptionService(apiKey);
+        _transcriptionService = new TextTranslationService(apiKey);
 
         _transcriptionService.TranscriptReceived += OnTranscriptReceived;
         _transcriptionService.StatusChanged += OnStatusChanged;
@@ -502,18 +498,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         IsMuted = !IsMuted;
 
-        // ╔══════════════════════════════════════════════════════════╗
-        // ║ MUTE DO SISTEMA (Windows Core Audio API)                  ║
-        // ║                                                          ║
-        // ║ Muta o dispositivo de mic no nível do Windows.             ║
-        // ║ Um único botão muta em TODO lugar:                        ║
-        // ║ - Teams / WhatsApp / Discord / etc.                       ║
-        // ║ - WaveInEvent (NAudio) → silenciado                       ║
-        // ║ - OpenAI Realtime API → sem custo                        ║
-        // ║                                                          ║
-        // ║ NOTA: Guarda o estado original do mute para restaurar     ║
-        // ║ quando desmutar ou quando o app fechar.                   ║
-        // ╚══════════════════════════════════════════════════════════╝
+        // Muta o mic no nível do Windows (afeta Teams, Discord, etc.)
         try
         {
             SetSystemMicMute(IsMuted);
@@ -601,7 +586,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         LoadDevices();
     }
 
-    // ─── INTÉRPRETE ATIVO ─────────────────────────────────
+    // --- Intérprete ---
     public async Task ToggleSpeakConnectionAsync()
     {
         if (IsSpeakConnected)
@@ -653,7 +638,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
                     SpeakStatusText = "⚠ OPENAI_API_KEY nao encontrada";
                     return null;
                 }
-                return new OpenAiInterpreterServiceAdapter(apiKey, _sharedAudioState);
+                return new OpenAiInterpreterAdapter(apiKey, _sharedAudioState);
 
             case InterpreterProvider.AzureSpeech:
                 var speechKey = string.IsNullOrWhiteSpace(AzureSpeechKey)
@@ -711,7 +696,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
         InputText = string.Empty;
     }
-    // ─── BATCHED LOG WRITER ────────────────────────────────
+    // --- Log writer ---
     private async Task RunLogWriter()
     {
         var writers = new Dictionary<string, StreamWriter>();
@@ -746,10 +731,10 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
             }
         }
     }
-    // ─── EVENT HANDLERS ────────────────────────────────────
+    // --- Event handlers ---
     private void OnTranscriptReceived(object? sender, TranscriptEventArgs e)
     {
-        // Log via channel batched — zero Task.Run, zero File.Open por linha
+        // Log via channel batched
         var logLine =
             $"[{DateTime.Now:HH:mm:ss}] IsPartial={e.IsPartial}, Speaker={e.Speaker}, Original=\"{e.OriginalText}\", Translated=\"{e.TranslatedText}\"";
         _logChannel.Writer.TryWrite(("transcripts.log", logLine));
@@ -834,7 +819,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         });
     }
 
-    // ─── SPEAK EVENT HANDLERS ──────────────────────────────
+    // --- Speak event handlers ---
     private void OnSpeakStatusChanged(object? sender, StatusEventArgs e)
     {
         _dispatcher.BeginInvoke(() => SpeakStatusText = e.Message);
@@ -851,7 +836,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         // Reservado para indicadores visuais futuros
     }
 
-    // ─── INotifyPropertyChanged ────────────────────────────
+    // --- INotifyPropertyChanged ---
     public event PropertyChangedEventHandler? PropertyChanged;
     private void OnPropertyChanged([CallerMemberName] string? name = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
