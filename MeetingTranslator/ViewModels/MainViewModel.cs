@@ -16,6 +16,7 @@ using MeetingTranslator.Services.Azure;
 using OpenAiVoiceService = MeetingTranslator.Services.OpenAI.VoiceTranslationService;
 using AzureVoiceService = MeetingTranslator.Services.Azure.VoiceTranslationService;
 using dotenv.net;
+using System.Linq;
 
 namespace MeetingTranslator.ViewModels;
 
@@ -312,6 +313,37 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     public ObservableCollection<AudioDeviceInfo> LoopbackDevices { get; } = new();
     public ObservableCollection<AudioDeviceInfo> SpeakOutputDevices { get; } = new();
     public ObservableCollection<ConversationEntry> History { get; } = new();
+    public ObservableCollection<CombinedInputDevice> AllInputDevices { get; } = new();
+
+    private CombinedInputDevice? _selectedInputDevice;
+    public CombinedInputDevice? SelectedInputDevice
+    {
+        get => _selectedInputDevice;
+        set
+        {
+            _selectedInputDevice = value;
+            OnPropertyChanged();
+
+            if (value == null) return;
+
+            if (value.IsMic)
+            {
+                UseMic = true;
+                UseLoopback = false;
+                var match = MicDevices.FirstOrDefault(d => d.DeviceIndex == value.DeviceIndex)
+                            ?? MicDevices.FirstOrDefault(d => d.Name == value.Name || ("🎤 " + d.Name) == value.Name);
+                if (match != null) SelectedMicDevice = match;
+            }
+            else if (value.IsLoopback)
+            {
+                UseMic = false;
+                UseLoopback = true;
+                var match = LoopbackDevices.FirstOrDefault(d => d.DeviceIndex == value.DeviceIndex)
+                            ?? LoopbackDevices.FirstOrDefault(d => d.Name == value.Name || ("🔊 " + d.Name) == value.Name);
+                if (match != null) SelectedLoopbackDevice = match;
+            }
+        }
+    }
 
     // Acumulador de transcript parcial
     private string _partialTranscript = "";
@@ -385,6 +417,39 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         if (LoopbackDevices.Count > 0) SelectedLoopbackDevice = LoopbackDevices[0];
         if (MicDevices.Count > 0 && SelectedSpeakMicDevice == null) SelectedSpeakMicDevice = MicDevices[0];
         if (SpeakOutputDevices.Count > 0) SelectedSpeakOutputDevice = SpeakOutputDevices[0];
+
+        // Preenche lista combinada de entrada (mic + loopback)
+        AllInputDevices.Clear();
+        foreach (var m in MicDevices)
+        {
+            AllInputDevices.Add(new CombinedInputDevice
+            {
+                DeviceIndex = m.DeviceIndex,
+                Name = $"🎤 {m.Name}",
+                IsMic = true,
+                IsLoopback = false
+            });
+        }
+        foreach (var l in LoopbackDevices)
+        {
+            AllInputDevices.Add(new CombinedInputDevice
+            {
+                DeviceIndex = l.DeviceIndex,
+                Name = $"🔊 {l.Name}",
+                IsMic = false,
+                IsLoopback = true
+            });
+        }
+
+        // Define padrão: prioriza microfone, senão loopback
+        if (MicDevices.Count > 0)
+        {
+            SelectedInputDevice = AllInputDevices.FirstOrDefault(x => x.IsMic);
+        }
+        else if (LoopbackDevices.Count > 0)
+        {
+            SelectedInputDevice = AllInputDevices.FirstOrDefault(x => x.IsLoopback);
+        }
     }
 
     // --- Comandos ---

@@ -256,28 +256,62 @@ public sealed class VoiceTranslationService : IDisposable
 
     private void StartLoopbackCapture(int loopIndex)
     {
-        var enumerator = new MMDeviceEnumerator();
-        var renders = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToList();
-        if (loopIndex < 0 || loopIndex >= renders.Count) return;
-
-        var device = renders[loopIndex];
-        _loopback = new WasapiLoopbackCapture(device);
-        var srcFmt = _loopback.WaveFormat;
-
-        _loopback.DataAvailable += (_, e) =>
+        try
         {
-            // Evita loops: bloqueia durante playback próprio, qualquer playback externo e cooldown
-            if (_isPlaying) return;
-            if (_sharedAudioState?.IsAnyExternalPlaybackActive == true) return;
-            if (DateTime.UtcNow < _playbackCooldownUntil) return;
+            var enumerator = new MMDeviceEnumerator();
+            var renders = enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToList();
 
-            if (e.BytesRecorded == 0) return;
-            var converted = AudioHelper.ConvertAudioFormat(e.Buffer, e.BytesRecorded, srcFmt, SynthWaveFormat);
-            if (converted.Length == 0) return;
-            _loopPush?.Write(converted);
-        };
+            WasapiLoopbackCapture CreateDefaultLoopback()
+            {
+                // Captura do dispositivo de reprodução padrão
+                return new WasapiLoopbackCapture();
+            }
 
-        _loopback.StartRecording();
+            // Resolve dispositivo escolhido; fallback para padrão quando inválido
+            MMDevice? device = null;
+            if (loopIndex >= 0 && loopIndex < renders.Count)
+                device = renders[loopIndex];
+
+            try
+            {
+                _loopback = device != null ? new WasapiLoopbackCapture(device) : CreateDefaultLoopback();
+            }
+            catch
+            {
+                // Alguns endpoints (ex.: Bluetooth) não suportam loopback → usa padrão
+                _loopback = CreateDefaultLoopback();
+            }
+
+            var srcFmt = _loopback.WaveFormat;
+
+            // Feedback rápido para UI/diagnóstico
+            StatusChanged?.Invoke(this, new StatusEventArgs
+            {
+                Message = device != null
+                    ? $"Capturando sistema: {device.FriendlyName}"
+                    : "Capturando sistema: dispositivo padrão"
+            });
+
+            _loopback.DataAvailable += (_, e) =>
+            {
+                // Evita loops: bloqueia durante playback próprio e durante atividade do intérprete
+                if (_isPlaying) return;
+                if (_sharedAudioState?.SpeakPlaybackActive == true) return;
+                if (_sharedAudioState?.SpeakCooldownActive == true) return;
+                if (DateTime.UtcNow < _playbackCooldownUntil) return;
+
+                if (e.BytesRecorded == 0) return;
+                var converted = AudioHelper.ConvertAudioFormat(e.Buffer, e.BytesRecorded, srcFmt, SynthWaveFormat);
+                if (converted.Length == 0) return;
+                _loopPush?.Write(converted);
+            };
+
+            _loopback.StartRecording();
+        }
+        catch (Exception ex)
+        {
+            ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = $"Erro ao iniciar loopback: {ex.Message}" });
+        }
     }
 
     private void AttachHandlers(TranslationRecognizer recognizer, string targetLang)

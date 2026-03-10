@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:MeetingTranslator"
+        xmlns:models="clr-namespace:MeetingTranslator.Models"
         mc:Ignorable="d"
         Title="Meeting Translator"
         WindowStyle="None"
@@ -20,6 +21,8 @@
     <Window.Resources>
         <!-- Converters -->
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        
 
         <!-- Pulsing animation for analyzing indicator -->
         <Storyboard x:Key="PulseAnimation"
@@ -146,12 +149,50 @@
             </Setter>
         </Style>
 
+        <!-- Dark ComboBoxItem: strong contrast for list items -->
+        <Style x:Key="DarkComboBoxItem"
+               TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ButtonHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentBlue}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.6"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- Dark ComboBox -->
         <Style x:Key="DarkComboBox"
                TargetType="ComboBox">
             <Setter Property="Background"
                     Value="#22FFFFFF"/>
             <Setter Property="Foreground"
+                    Value="{StaticResource TextPrimary}"/>
+            <Setter Property="TextElement.Foreground"
                     Value="{StaticResource TextPrimary}"/>
             <Setter Property="BorderBrush"
                     Value="#33FFFFFF"/>
@@ -169,6 +210,7 @@
                     Value="Left"/>
             <Setter Property="Margin"
                     Value="0,4,0,0"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItem}"/>
         </Style>
 
         <!-- Pill RadioButton -->
@@ -476,24 +518,22 @@
                     Visibility="{Binding IsSettingsVisible, Converter={StaticResource BoolToVis}}"
                     BorderBrush="#22FFFFFF"
                     BorderThickness="0,1,0,0">
-                <TabControl Style="{StaticResource DarkTabControl}">
+                                <TabControl Style="{StaticResource DarkTabControl}">
 
-                    <!-- ── TAB: GERAL ── -->
-                    <TabItem Header="Geral"
+                                        <!-- ── TAB: ENTRADA ── -->
+                                        <TabItem Header="Entrada"
                              Style="{StaticResource DarkTabItem}">
                         <StackPanel Margin="14,12">
-                            <!-- Modo -->
-                            <StackPanel Orientation="Horizontal"
-                                        Margin="0,0,0,6">
-                                <RadioButton GroupName="ApiMode"
-                                             IsChecked="{Binding IsVoiceMode}"
-                                             Style="{StaticResource PillRadio}"
-                                             Content="🎙️ Voz"/>
-                                <RadioButton GroupName="ApiMode"
-                                             IsChecked="{Binding IsTranscriptionMode}"
-                                             Style="{StaticResource PillRadio}"
-                                             Content="📝 Transcrição"/>
-                            </StackPanel>
+                                                        <!-- Modo -->
+                                                        <TextBlock Text="Modo"
+                                                                           Foreground="{StaticResource TextPrimary}"
+                                                                           FontSize="12"
+                                                                           FontFamily="Segoe UI"/>
+                                                        <ComboBox SelectedValue="{Binding SelectedMode}"
+                                                                          SelectedValuePath="Tag">
+                                                                <ComboBoxItem Content="🎙️ Voz" Tag="{x:Static models:TranslationMode.Voice}"/>
+                                                                <ComboBoxItem Content="📝 Transcrição" Tag="{x:Static models:TranslationMode.Transcription}"/>
+                                                        </ComboBox>
                             <TextBlock Text="{Binding ModeDescription}"
                                        Foreground="{StaticResource TextSecondary}"
                                        FontSize="10"
@@ -502,47 +542,13 @@
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,14"/>
 
-                            <!-- Microfone -->
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <CheckBox Grid.Column="0"
-                                          IsChecked="{Binding UseMic}"
-                                          VerticalAlignment="Top"
-                                          Margin="0,2,8,0"/>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="🎤 Microfone (PT→EN)"
-                                               Foreground="{StaticResource TextPrimary}"
-                                               FontSize="12"
-                                               FontFamily="Segoe UI"/>
-                                    <ComboBox ItemsSource="{Binding MicDevices}"
-                                              SelectedItem="{Binding SelectedMicDevice}"
-                                              Style="{StaticResource DarkComboBox}"/>
-                                </StackPanel>
-                            </Grid>
-
-                            <!-- Loopback -->
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <CheckBox Grid.Column="0"
-                                          IsChecked="{Binding UseLoopback}"
-                                          VerticalAlignment="Top"
-                                          Margin="0,2,8,0"/>
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="🔊 Áudio do Sistema (EN→PT)"
-                                               Foreground="{StaticResource TextPrimary}"
-                                               FontSize="12"
-                                               FontFamily="Segoe UI"/>
-                                    <ComboBox ItemsSource="{Binding LoopbackDevices}"
-                                              SelectedItem="{Binding SelectedLoopbackDevice}"
-                                              Style="{StaticResource DarkComboBox}"/>
-                                </StackPanel>
-                            </Grid>
+                                                        <!-- INPUT: único seletor com todos dispositivos (mic + sistema) -->
+                                                        <TextBlock Text="INPUT"
+                                                                           Foreground="{StaticResource TextPrimary}"
+                                                                           FontSize="12"
+                                                                           FontFamily="Segoe UI"/>
+                                                            <ComboBox ItemsSource="{Binding AllInputDevices}"
+                                                                      SelectedItem="{Binding SelectedInputDevice}"/>
 
                             <Button Style="{StaticResource BarButton}"
                                     Content="🔄 Atualizar dispositivos"
@@ -553,8 +559,8 @@
                         </StackPanel>
                     </TabItem>
 
-                    <!-- ── TAB: INTÉRPRETE ── -->
-                    <TabItem Header="Intérprete"
+                                        <!-- ── TAB: SAÍDA ── -->
+                                        <TabItem Header="Saída"
                              Style="{StaticResource DarkTabItem}">
                         <StackPanel Margin="14,12">
                             <!-- Habilitar -->
@@ -585,8 +591,7 @@
                                                    FontSize="12"
                                                    FontFamily="Segoe UI"/>
                                         <ComboBox ItemsSource="{Binding MicDevices}"
-                                                  SelectedItem="{Binding SelectedSpeakMicDevice}"
-                                                  Style="{StaticResource DarkComboBox}"/>
+                                                  SelectedItem="{Binding SelectedSpeakMicDevice}"/>
                                     </StackPanel>
                                 </Grid>
 
@@ -607,8 +612,7 @@
                                                    FontSize="12"
                                                    FontFamily="Segoe UI"/>
                                         <ComboBox ItemsSource="{Binding SpeakOutputDevices}"
-                                                  SelectedItem="{Binding SelectedSpeakOutputDevice}"
-                                                  Style="{StaticResource DarkComboBox}"/>
+                                                  SelectedItem="{Binding SelectedSpeakOutputDevice}"/>
                                     </StackPanel>
                                 </Grid>
 
