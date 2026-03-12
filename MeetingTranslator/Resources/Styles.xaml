@@ -21,10 +21,29 @@
                          AutoReverse="True"/>
     </Storyboard>
 
+    <!-- Animação de três pontos (Thinking) -->
+    <Storyboard x:Key="ThinkingAnimation" RepeatBehavior="Forever">
+        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Dot1" Storyboard.TargetProperty="Opacity">
+            <LinearDoubleKeyFrame Value="1" KeyTime="0:0:0.0"/>
+            <LinearDoubleKeyFrame Value="0.3" KeyTime="0:0:0.4"/>
+            <LinearDoubleKeyFrame Value="1" KeyTime="0:0:0.8"/>
+        </DoubleAnimationUsingKeyFrames>
+        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Dot2" Storyboard.TargetProperty="Opacity">
+            <LinearDoubleKeyFrame Value="0.3" KeyTime="0:0:0.0"/>
+            <LinearDoubleKeyFrame Value="1" KeyTime="0:0:0.4"/>
+            <LinearDoubleKeyFrame Value="0.3" KeyTime="0:0:0.8"/>
+        </DoubleAnimationUsingKeyFrames>
+        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Dot3" Storyboard.TargetProperty="Opacity">
+            <LinearDoubleKeyFrame Value="1" KeyTime="0:0:0.4"/>
+            <LinearDoubleKeyFrame Value="0.3" KeyTime="0:0:0.8"/>
+            <LinearDoubleKeyFrame Value="1" KeyTime="0:0:1.2"/>
+        </DoubleAnimationUsingKeyFrames>
+    </Storyboard>
+
     <!-- Animação de Slide para os painéis -->
     <Storyboard x:Key="SlideDownAnimation">
         <DoubleAnimation Storyboard.TargetProperty="MaxHeight"
-                         From="0" To="500" Duration="0:0:0.25">
+                         From="0" To="600" Duration="0:0:0.25">
             <DoubleAnimation.EasingFunction>
                 <CubicEase EasingMode="EaseOut"/>
             </DoubleAnimation.EasingFunction>
@@ -64,9 +83,9 @@
     <SolidColorBrush x:Key="ButtonHover" Color="#33FFFFFF"/>
 
     <!-- Bolhas do histórico -->
-    <SolidColorBrush x:Key="ChatAssistantBubble" Color="#33FFFFFF"/>
-    <SolidColorBrush x:Key="ChatUserBubble"      Color="#FF4A9EFF"/>
-    <SolidColorBrush x:Key="ChatAiBubble"        Color="#33FF00CC"/>
+    <SolidColorBrush x:Key="ChatAssistantBubble" Color="#11FFFFFF"/>
+    <SolidColorBrush x:Key="ChatUserBubble"      Color="#FF2D6BD4"/>
+    <SolidColorBrush x:Key="ChatAiBubble"        Color="#1AFFFFFF"/>
 
     <!-- ═══ ESTILOS DE CONTROLES ═══ -->
 
@@ -288,16 +307,32 @@
                     
                     
                     <!-- Imagem Anexada -->
-                    <Border CornerRadius="8" Margin="0,4,0,4" ClipToBounds="True" MaxHeight="200" HorizontalAlignment="Left"
+                    <Border CornerRadius="12" Margin="0,4,0,8" ClipToBounds="True" MaxHeight="240" HorizontalAlignment="Left"
+                            BorderBrush="#33FFFFFF" BorderThickness="1"
                             Visibility="{Binding AttachedImageBase64, Converter={StaticResource StringToVis}}">
+                        <Border.Effect>
+                            <DropShadowEffect BlurRadius="10" Opacity="0.3" ShadowDepth="2"/>
+                        </Border.Effect>
                         <Image Source="{Binding AttachedImageBase64, Converter={StaticResource Base64ToImg}}" Stretch="Uniform" StretchDirection="DownOnly"/>
                     </Border>
                     
-                    <TextBlock Text="{Binding TranslatedText}"
-                               Foreground="{StaticResource TextPrimary}"
-                               FontSize="13"
-                               FontFamily="Segoe UI"
-                               TextWrapping="Wrap"/>
+                    <Grid>
+                        <!-- Texto da Resposta -->
+                        <TextBlock Text="{Binding TranslatedText}"
+                                   Foreground="{StaticResource TextPrimary}"
+                                   FontSize="13"
+                                   FontFamily="Segoe UI"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding IsThinking, Converter={StaticResource InvertBoolConverter}}"/>
+                        
+                        <!-- Indicador de Pensando (Dots) -->
+                        <StackPanel x:Name="ThinkingIndicator" Orientation="Horizontal" Visibility="Collapsed" Margin="0,4">
+                            <Ellipse x:Name="Dot1" Width="6" Height="6" Fill="{StaticResource TextSecondary}" Margin="0,0,4,0"/>
+                            <Ellipse x:Name="Dot2" Width="6" Height="6" Fill="{StaticResource TextSecondary}" Margin="0,0,4,0"/>
+                            <Ellipse x:Name="Dot3" Width="6" Height="6" Fill="{StaticResource TextSecondary}"/>
+                        </StackPanel>
+                    </Grid>
+
                     <TextBlock Text="{Binding OriginalText}"
                                Foreground="{StaticResource TextSecondary}"
                                FontSize="11"
@@ -316,6 +351,12 @@
         </Grid>
 
         <DataTemplate.Triggers>
+            <DataTrigger Binding="{Binding IsThinking}" Value="True">
+                <Setter TargetName="ThinkingIndicator" Property="Visibility" Value="Visible"/>
+                <DataTrigger.EnterActions>
+                    <BeginStoryboard Storyboard="{StaticResource ThinkingAnimation}"/>
+                </DataTrigger.EnterActions>
+            </DataTrigger>
             <DataTrigger Binding="{Binding Speaker}" Value="You">
                 <Setter TargetName="Bubble" Property="Grid.Column"          Value="1"/>
                 <Setter TargetName="Bubble" Property="HorizontalAlignment"  Value="Right"/>

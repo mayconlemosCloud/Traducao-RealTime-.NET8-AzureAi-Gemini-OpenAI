@@ -523,14 +523,34 @@
                                         <Border Grid.Row="3" Background="#11FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="0,1,0,0" Padding="12,8">
                                             <StackPanel>
                                                 <!-- Image Attachment Preview -->
-                                                <Border CornerRadius="8" Background="#33000000" Padding="8" Margin="0,0,0,8" MaxHeight="120" HorizontalAlignment="Left"
-                                                        Visibility="{Binding PendingScreenshotBase64, Converter={StaticResource StringToVis}}">
+                                                <Border x:Name="CapturePreviewBorder" CornerRadius="12" Background="#1AFFFFFF" Padding="8" Margin="0,0,0,12" MaxHeight="100" HorizontalAlignment="Left"
+                                                        BorderBrush="{StaticResource AccentGold}" BorderThickness="1.5">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding PendingScreenshotBase64, Converter={StaticResource StringToVis}}" Value="Visible">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <Border.Effect>
+                                                        <DropShadowEffect BlurRadius="12" Opacity="0.4" Color="#FFFFAA00" ShadowDepth="0"/>
+                                                    </Border.Effect>
                                                     <StackPanel Orientation="Horizontal">
-                                                        <Border Width="60" Height="40" CornerRadius="4" ClipToBounds="True" Margin="0,0,10,0" BorderBrush="#33FFFFFF" BorderThickness="1">
+                                                        <Border Width="70" Height="45" CornerRadius="6" ClipToBounds="True" Margin="0,0,12,0" BorderBrush="#44FFFFFF" BorderThickness="1">
                                                             <Image Source="{Binding PendingScreenshotBase64, Converter={StaticResource Base64ToImg}}" Stretch="UniformToFill"/>
                                                         </Border>
-                                                        <TextBlock Text="Print pronto para análise" Foreground="{StaticResource TextPrimary}" VerticalAlignment="Center" FontSize="11" Margin="0,0,12,0"/>
-                                                        <Button Style="{StaticResource BarButton}" Content="✕" Click="ClearScreenshot_Click" ToolTip="Remover anexo" Padding="4"/>
+                                                        
+                                                        <StackPanel VerticalAlignment="Center">
+                                                            <TextBlock Text="📸 CAPTURA DE TELA" Foreground="{StaticResource AccentGold}" FontWeight="Bold" FontSize="10"/>
+                                                            <TextBlock Text="Pronta para analisar" Foreground="{StaticResource TextSecondary}" FontSize="9" Margin="0,2,0,0"/>
+                                                            <!-- Debug indicator: só visível se houver string mas algo falhar -->
+                                                            <TextBlock Text="[Image Data Detected]" Foreground="{StaticResource AccentGreen}" FontSize="7" Margin="0,2,0,0" Visibility="Collapsed"/>
+                                                        </StackPanel>
+                                                        
+                                                        <Button Style="{StaticResource BarButton}" Content="✕" Click="ClearScreenshot_Click" ToolTip="Remover" Padding="8" Margin="12,0,0,0" VerticalAlignment="Center" FontSize="10"/>
                                                     </StackPanel>
                                                 </Border>
 

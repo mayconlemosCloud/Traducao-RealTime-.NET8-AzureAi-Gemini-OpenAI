@@ -62,12 +62,20 @@ public partial class MainViewModel
         History.Add(new Models.ConversationEntry
         {
             Speaker = Models.Speaker.You,
-            TranslatedText = string.IsNullOrWhiteSpace(prompt) ? "(Imagem enviada)" : prompt,
+            TranslatedText = string.IsNullOrWhiteSpace(prompt) ? "📸 Imagem enviada para análise" : prompt,
             OriginalText = "Prompt Enviado",
             AttachedImageBase64 = base64Image
         });
 
         IsAiProcessing = true;
+        
+        // Adiciona uma bolha de "pensando" da IA
+        var thinkingEntry = new Models.ConversationEntry
+        {
+            Speaker = Models.Speaker.AI,
+            IsThinking = true
+        };
+        History.Add(thinkingEntry);
         
         try
         {
@@ -83,7 +91,7 @@ public partial class MainViewModel
                 // Vamos enviar o prompt junto com todo o histórico recente como contexto
                 var sb = new StringBuilder();
                 sb.AppendLine("Contexto prévio do chat:");
-                foreach (var item in History.TakeLast(20))
+                foreach (var item in History.TakeLast(20).Where(x => !x.IsThinking))
                 {
                     bool isAi = item.Speaker == Models.Speaker.AI;
                     bool isUser = item.Speaker == Models.Speaker.You;
@@ -96,19 +104,29 @@ public partial class MainViewModel
                 response = await Gemini.AnalyzeTextAsync(sb.ToString());
             }
 
-            History.Add(new Models.ConversationEntry
+            // Atualiza a bolha que estava pensando com o texto real
+            var index = History.IndexOf(thinkingEntry);
+            if (index != -1)
             {
-                Speaker = Models.Speaker.AI,
-                TranslatedText = response
-            });
+                History[index] = new Models.ConversationEntry
+                {
+                    Speaker = Models.Speaker.AI,
+                    TranslatedText = response,
+                    Timestamp = DateTimeOffset.UtcNow
+                };
+            }
         }
         catch (Exception ex)
         {
-            History.Add(new Models.ConversationEntry
+            var index = History.IndexOf(thinkingEntry);
+            if (index != -1)
             {
-                Speaker = Models.Speaker.AI,
-                TranslatedText = $"⚠️ Erro ao consultar Gemini: {ex.Message}"
-            });
+                History[index] = new Models.ConversationEntry
+                {
+                    Speaker = Models.Speaker.AI,
+                    TranslatedText = $"⚠️ Erro ao consultar Gemini: {ex.Message}"
+                };
+            }
         }
         finally
         {
@@ -132,11 +150,19 @@ public partial class MainViewModel
 
         IsAiProcessing = true;
         
+        // Adiciona uma bolha de "pensando" da IA
+        var thinkingEntry = new Models.ConversationEntry
+        {
+            Speaker = Models.Speaker.AI,
+            IsThinking = true
+        };
+        History.Add(thinkingEntry);
+        
         try
         {
             var sb = new StringBuilder();
             sb.AppendLine("Histórico da Reunião:");
-            foreach (var item in History)
+            foreach (var item in History.Where(x => !x.IsThinking))
             {
                 if (item.Speaker == Models.Speaker.Them)
                     sb.AppendLine($"[Inglês: {item.OriginalText}] -> [Português: {item.TranslatedText}]");
@@ -148,19 +174,29 @@ public partial class MainViewModel
 
             var response = await Gemini.AnalyzeTextAsync(sb.ToString());
             
-            History.Add(new Models.ConversationEntry
+            // Atualiza a bolha que estava pensando com o resumo
+            var index = History.IndexOf(thinkingEntry);
+            if (index != -1)
             {
-                Speaker = Models.Speaker.AI,
-                TranslatedText = response
-            });
+                History[index] = new Models.ConversationEntry
+                {
+                    Speaker = Models.Speaker.AI,
+                    TranslatedText = response,
+                    Timestamp = DateTimeOffset.UtcNow
+                };
+            }
         }
         catch (Exception ex)
         {
-             History.Add(new Models.ConversationEntry
-            {
-                Speaker = Models.Speaker.AI,
-                TranslatedText = $"⚠️ Erro ao consultar Gemini: {ex.Message}"
-            });
+             var index = History.IndexOf(thinkingEntry);
+             if (index != -1)
+             {
+                 History[index] = new Models.ConversationEntry
+                 {
+                     Speaker = Models.Speaker.AI,
+                     TranslatedText = $"⚠️ Erro ao consultar Gemini: {ex.Message}"
+                 };
+             }
         }
         finally
         {

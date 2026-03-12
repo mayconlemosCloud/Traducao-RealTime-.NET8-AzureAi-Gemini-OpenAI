@@ -17,5 +17,7 @@ public class ConversationEntry
     // Suporte a anexo visual no chat
     public string? AttachedImageBase64 { get; init; }
 
+    public bool IsThinking { get; set; }
+
     public string TimeLabel => Timestamp.LocalDateTime.ToString("HH:mm");
 }

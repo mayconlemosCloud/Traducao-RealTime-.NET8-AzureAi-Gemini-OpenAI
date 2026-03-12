@@ -5,7 +5,9 @@ using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Threading.Tasks;
 using Point = System.Windows.Point;
 
 namespace MeetingTranslator;
@@ -19,6 +21,12 @@ public partial class ScreenCaptureWindow : Window
     public ScreenCaptureWindow()
     {
         InitializeComponent();
+        
+        // Configura a janela para cobrir toda a área virtual (todos os monitores)
+        this.Left = SystemParameters.VirtualScreenLeft;
+        this.Top = SystemParameters.VirtualScreenTop;
+        this.Width = SystemParameters.VirtualScreenWidth;
+        this.Height = SystemParameters.VirtualScreenHeight;
     }
 
     private void Window_MouseDown(object sender, MouseButtonEventArgs e)
@@ -50,7 +58,7 @@ public partial class ScreenCaptureWindow : Window
         }
     }
 
-    private void Window_MouseUp(object sender, MouseButtonEventArgs e)
+    private async void Window_MouseUp(object sender, MouseButtonEventArgs e)
     {
         if (_isDrawing)
         {
@@ -63,37 +71,58 @@ public partial class ScreenCaptureWindow : Window
 
             if (screenWidth > 0 && screenHeight > 0)
             {
-                this.Hide(); // Esconder a janela para limpar a cor escura e bordas vermelhas da tela
-
-                // Dar um pequeno delay para a UI do Windows processar o Hide() da transparência
-                System.Threading.Thread.Sleep(50); 
-
-                var ptScreen = this.PointToScreen(new Point(System.Windows.Controls.Canvas.GetLeft(SelectionRectangle), System.Windows.Controls.Canvas.GetTop(SelectionRectangle)));
-
-                // Obter as coordenadas físicas se houver diferença de DPI
+                // Obter as coordenadas físicas se houver diferença de DPI ANTES de esconder a janela
                 PresentationSource source = PresentationSource.FromVisual(this);
                 double dpiX = 1.0, dpiY = 1.0;
+                
                 if (source?.CompositionTarget != null)
                 {
                     dpiX = source.CompositionTarget.TransformToDevice.M11;
                     dpiY = source.CompositionTarget.TransformToDevice.M22;
                 }
+                else
+                {
+                    // Fallback para DPI padrão
+                    dpiX = VisualTreeHelper.GetDpi(this).DpiScaleX;
+                    dpiY = VisualTreeHelper.GetDpi(this).DpiScaleY;
+                }
+
+                // Coordenadas relativas ao Canvas (que cobre todo o VirtualScreen)
+                double left = System.Windows.Controls.Canvas.GetLeft(SelectionRectangle);
+                double top = System.Windows.Controls.Canvas.GetTop(SelectionRectangle);
+
+                this.Hide(); 
+
+                // Aguarda a janela ser removida visualmente da composição do Desktop
+                await System.Threading.Tasks.Task.Delay(100); 
+
+                // Converter coordenadas lógicas (WPF) para coordenadas de tela reais (físicas)
+                var screenX = (int)((this.Left + left) * dpiX);
+                var screenY = (int)((this.Top + top) * dpiY);
 
                 int physicalWidth = (int)(screenWidth * dpiX);
                 int physicalHeight = (int)(screenHeight * dpiY);
 
-                using (var bitmap = new Bitmap(physicalWidth, physicalHeight, PixelFormat.Format32bppArgb))
+                try
                 {
-                    using (var graphics = Graphics.FromImage(bitmap))
+                    using (var bitmap = new Bitmap(physicalWidth, physicalHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
                     {
-                        graphics.CopyFromScreen((int)ptScreen.X, (int)ptScreen.Y, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
-                    }
+                        using (var graphics = Graphics.FromImage(bitmap))
+                        {
+                            graphics.CopyFromScreen(screenX, screenY, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
+                        }
 
-                    using (var ms = new MemoryStream())
-                    {
-                        bitmap.Save(ms, ImageFormat.Png);
-                        Base64CapturedImage = Convert.ToBase64String(ms.ToArray());
+                        using (var ms = new MemoryStream())
+                        {
+                            bitmap.Save(ms, ImageFormat.Png);
+                            Base64CapturedImage = Convert.ToBase64String(ms.ToArray());
+                            System.Diagnostics.Debug.WriteLine($"[Capture] Sucesso! Base64 length: {Base64CapturedImage.Length}");
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[Capture] Erro ao capturar: {ex.Message}");
                 }
             }
 
