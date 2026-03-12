@@ -10,7 +10,7 @@ public class GeminiService
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
-    private const string ApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent";
+    private const string ApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
 
     public GeminiService()
     {
