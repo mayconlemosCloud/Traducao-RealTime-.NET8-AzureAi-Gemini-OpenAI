@@ -19,364 +19,20 @@
         MouseLeftButtonDown="Window_MouseLeftButtonDown">
 
         <Window.Resources>
-                <!-- Converters -->
-                <BooleanToVisibilityConverter x:Key="BoolToVis"/>
-
-
-
-                <!-- Pulsing animation for analyzing indicator -->
-                <Storyboard x:Key="PulseAnimation"
-                            RepeatBehavior="Forever">
-                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
-                                         From="1.0"
-                                         To="0.3"
-                                         Duration="0:0:0.8"
-                                         AutoReverse="True"/>
-                </Storyboard>
-
-                <!-- Dark semi-transparent background -->
-                <SolidColorBrush x:Key="BarBg"
-                                 Color="#CC1A1A2E"/>
-                <SolidColorBrush x:Key="BarBgSolid"
-                                 Color="#FF1A1A2E"/>
-                <SolidColorBrush x:Key="AccentBlue"
-                                 Color="#FF4A9EFF"/>
-                <SolidColorBrush x:Key="AccentGreen"
-                                 Color="#FF4AFF8A"/>
-                <SolidColorBrush x:Key="AccentGold"
-                                 Color="#FFFFAA00"/>
-                <SolidColorBrush x:Key="TextPrimary"
-                                 Color="#FFFFFFFF"/>
-                <SolidColorBrush x:Key="TextSecondary"
-                                 Color="#99FFFFFF"/>
-                <SolidColorBrush x:Key="ButtonHover"
-                                 Color="#33FFFFFF"/>
-
-                <SolidColorBrush x:Key="ChatAssistantBubble"
-                                 Color="#33FFFFFF"/>
-                <SolidColorBrush x:Key="ChatUserBubble"
-                                 Color="#FF4A9EFF"/>
-
-                <!-- Minimal button style -->
-                <Style x:Key="BarButton"
-                       TargetType="Button">
-                        <Setter Property="Background"
-                                Value="Transparent"/>
-                        <Setter Property="Foreground"
-                                Value="{StaticResource TextSecondary}"/>
-                        <Setter Property="BorderThickness"
-                                Value="0"/>
-                        <Setter Property="Padding"
-                                Value="8,4"/>
-                        <Setter Property="FontSize"
-                                Value="14"/>
-                        <Setter Property="Cursor"
-                                Value="Hand"/>
-                        <Setter Property="Template">
-                                <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                                <Border x:Name="bd"
-                                                        Background="{TemplateBinding Background}"
-                                                        CornerRadius="4"
-                                                        Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver"
-                                                                 Value="True">
-                                                                <Setter TargetName="bd"
-                                                                        Property="Background"
-                                                                        Value="{StaticResource ButtonHover}"/>
-                                                        </Trigger>
-                                                </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
-
-                <!-- Dark TabControl -->
-                <Style x:Key="DarkTabControl"
-                       TargetType="TabControl">
-                        <Setter Property="Background"
-                                Value="Transparent"/>
-                        <Setter Property="BorderThickness"
-                                Value="0"/>
-                        <Setter Property="Padding"
-                                Value="0"/>
-                </Style>
-
-                <!-- Dark TabItem -->
-                <Style x:Key="DarkTabItem"
-                       TargetType="TabItem">
-                        <Setter Property="Foreground"
-                                Value="{StaticResource TextSecondary}"/>
-                        <Setter Property="FontFamily"
-                                Value="Segoe UI"/>
-                        <Setter Property="FontSize"
-                                Value="12"/>
-                        <Setter Property="Template">
-                                <Setter.Value>
-                                        <ControlTemplate TargetType="TabItem">
-                                                <Border x:Name="bd"
-                                                        Padding="14,8"
-                                                        Background="Transparent"
-                                                        BorderBrush="Transparent"
-                                                        BorderThickness="0,0,0,2"
-                                                        Cursor="Hand">
-                                                        <ContentPresenter ContentSource="Header"
-                                                                          HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsSelected"
-                                                                 Value="True">
-                                                                <Setter TargetName="bd"
-                                                                        Property="BorderBrush"
-                                                                        Value="{StaticResource AccentBlue}"/>
-                                                                <Setter Property="Foreground"
-                                                                        Value="{StaticResource TextPrimary}"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsMouseOver"
-                                                                 Value="True">
-                                                                <Setter TargetName="bd"
-                                                                        Property="Background"
-                                                                        Value="{StaticResource ButtonHover}"/>
-                                                        </Trigger>
-                                                </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
-
-                <!-- Dark ComboBoxItem: strong contrast for list items -->
-                <Style x:Key="DarkComboBoxItem"
-                       TargetType="ComboBoxItem">
-                        <Setter Property="Foreground"
-                                Value="{StaticResource TextPrimary}"/>
-                        <Setter Property="FontFamily"
-                                Value="Segoe UI"/>
-                        <Setter Property="FontSize"
-                                Value="12"/>
-                        <Setter Property="Padding"
-                                Value="10,6"/>
-                        <Setter Property="Background"
-                                Value="Transparent"/>
-                        <Setter Property="BorderThickness"
-                                Value="0"/>
-                        <Setter Property="SnapsToDevicePixels"
-                                Value="True"/>
-                        <Setter Property="Template">
-                                <Setter.Value>
-                                        <ControlTemplate TargetType="ComboBoxItem">
-                                                <Border x:Name="Bd"
-                                                        Background="{TemplateBinding Background}"
-                                                        Padding="{TemplateBinding Padding}">
-                                                        <ContentPresenter HorizontalAlignment="Left"
-                                                                          VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsHighlighted"
-                                                                 Value="True">
-                                                                <Setter TargetName="Bd"
-                                                                        Property="Background"
-                                                                        Value="{StaticResource ButtonHover}"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsSelected"
-                                                                 Value="True">
-                                                                <Setter TargetName="Bd"
-                                                                        Property="Background"
-                                                                        Value="{StaticResource AccentBlue}"/>
-                                                                <Setter Property="Foreground"
-                                                                        Value="{StaticResource TextPrimary}"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsEnabled"
-                                                                 Value="False">
-                                                                <Setter Property="Opacity"
-                                                                        Value="0.6"/>
-                                                        </Trigger>
-                                                </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
-
-                <!-- Dark ComboBox -->
-                <Style x:Key="DarkComboBox"
-                       TargetType="ComboBox">
-                        <Setter Property="Background"
-                                Value="#22FFFFFF"/>
-                        <Setter Property="Foreground"
-                                Value="{StaticResource TextPrimary}"/>
-                        <Setter Property="TextElement.Foreground"
-                                Value="{StaticResource TextPrimary}"/>
-                        <Setter Property="BorderBrush"
-                                Value="#33FFFFFF"/>
-                        <Setter Property="BorderThickness"
-                                Value="1"/>
-                        <Setter Property="FontSize"
-                                Value="11"/>
-                        <Setter Property="FontFamily"
-                                Value="Segoe UI"/>
-                        <Setter Property="Padding"
-                                Value="6,4"/>
-                        <Setter Property="MaxWidth"
-                                Value="380"/>
-                        <Setter Property="HorizontalAlignment"
-                                Value="Left"/>
-                        <Setter Property="Margin"
-                                Value="0,4,0,0"/>
-                        <Setter Property="ItemContainerStyle"
-                                Value="{StaticResource DarkComboBoxItem}"/>
-                </Style>
-
-                <!-- Pill RadioButton -->
-                <Style x:Key="PillRadio"
-                       TargetType="RadioButton">
-                        <Setter Property="Foreground"
-                                Value="{StaticResource TextSecondary}"/>
-                        <Setter Property="FontFamily"
-                                Value="Segoe UI"/>
-                        <Setter Property="FontSize"
-                                Value="12"/>
-                        <Setter Property="Cursor"
-                                Value="Hand"/>
-                        <Setter Property="Margin"
-                                Value="0,0,6,0"/>
-                        <Setter Property="Template">
-                                <Setter.Value>
-                                        <ControlTemplate TargetType="RadioButton">
-                                                <Border x:Name="bd"
-                                                        Background="#11FFFFFF"
-                                                        CornerRadius="12"
-                                                        Padding="14,6"
-                                                        BorderBrush="#22FFFFFF"
-                                                        BorderThickness="1">
-                                                        <ContentPresenter HorizontalAlignment="Center"
-                                                                          VerticalAlignment="Center"/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsChecked"
-                                                                 Value="True">
-                                                                <Setter TargetName="bd"
-                                                                        Property="Background"
-                                                                        Value="#334A9EFF"/>
-                                                                <Setter TargetName="bd"
-                                                                        Property="BorderBrush"
-                                                                        Value="{StaticResource AccentBlue}"/>
-                                                                <Setter Property="Foreground"
-                                                                        Value="{StaticResource TextPrimary}"/>
-                                                        </Trigger>
-                                                        <Trigger Property="IsMouseOver"
-                                                                 Value="True">
-                                                                <Setter TargetName="bd"
-                                                                        Property="Background"
-                                                                        Value="#22FFFFFF"/>
-                                                        </Trigger>
-                                                </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                </Setter.Value>
-                        </Setter>
-                </Style>
-
-                <!-- Dark TextBox -->
-                <Style x:Key="DarkTextBox"
-                       TargetType="TextBox">
-                        <Setter Property="Background"
-                                Value="#22FFFFFF"/>
-                        <Setter Property="Foreground"
-                                Value="{StaticResource TextPrimary}"/>
-                        <Setter Property="BorderBrush"
-                                Value="#33FFFFFF"/>
-                        <Setter Property="BorderThickness"
-                                Value="1"/>
-                        <Setter Property="FontSize"
-                                Value="11"/>
-                        <Setter Property="FontFamily"
-                                Value="Segoe UI"/>
-                        <Setter Property="Padding"
-                                Value="6,4"/>
-                        <Setter Property="MinWidth"
-                                Value="260"/>
-                        <Setter Property="HorizontalAlignment"
-                                Value="Left"/>
-                        <Setter Property="Margin"
-                                Value="0,3,0,0"/>
-                        <Setter Property="CaretBrush"
-                                Value="White"/>
-                </Style>
-
-                <!-- History item template as chat bubbles -->
-                <DataTemplate x:Key="HistoryItemTemplate">
-                        <Grid Margin="12,4">
-                                <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-
-                                <Border x:Name="Bubble"
-                                        Grid.Column="0"
-                                        Background="{StaticResource ChatAssistantBubble}"
-                                        CornerRadius="16"
-                                        Padding="12,8"
-                                        MaxWidth="420">
-                                        <StackPanel>
-                                                <TextBlock Text="{Binding TranslatedText}"
-                                                           Foreground="{StaticResource TextPrimary}"
-                                                           FontSize="13"
-                                                           FontFamily="Segoe UI"
-                                                           TextWrapping="Wrap"/>
-                                                <TextBlock Text="{Binding OriginalText}"
-                                                           Foreground="{StaticResource TextSecondary}"
-                                                           FontSize="11"
-                                                           FontFamily="Segoe UI"
-                                                           TextWrapping="Wrap"
-                                                           Margin="0,4,0,0"
-                                                           Visibility="{Binding OriginalText, Converter={StaticResource BoolToVis}}"/>
-                                                <TextBlock Text="{Binding TimeLabel}"
-                                                           Foreground="{StaticResource TextSecondary}"
-                                                           FontSize="10"
-                                                           FontFamily="Segoe UI"
-                                                           HorizontalAlignment="Right"
-                                                           Margin="0,4,0,0"/>
-                                        </StackPanel>
-                                </Border>
-                        </Grid>
-
-                        <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding Speaker}"
-                                             Value="You">
-                                        <Setter TargetName="Bubble"
-                                                Property="Grid.Column"
-                                                Value="1"/>
-                                        <Setter TargetName="Bubble"
-                                                Property="HorizontalAlignment"
-                                                Value="Right"/>
-                                        <Setter TargetName="Bubble"
-                                                Property="Background"
-                                                Value="{StaticResource ChatUserBubble}"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Speaker}"
-                                             Value="Them">
-                                        <Setter TargetName="Bubble"
-                                                Property="Grid.Column"
-                                                Value="0"/>
-                                        <Setter TargetName="Bubble"
-                                                Property="HorizontalAlignment"
-                                                Value="Left"/>
-                                        <Setter TargetName="Bubble"
-                                                Property="Background"
-                                                Value="{StaticResource ChatAssistantBubble}"/>
-                                </DataTrigger>
-                        </DataTemplate.Triggers>
-                </DataTemplate>
+                <ResourceDictionary>
+                        <ResourceDictionary.MergedDictionaries>
+                                <ResourceDictionary Source="Resources/Styles.xaml"/>
+                        </ResourceDictionary.MergedDictionaries>
+                </ResourceDictionary>
         </Window.Resources>
 
         <Border CornerRadius="10"
                 Background="{StaticResource BarBg}"
                 BorderBrush="#33FFFFFF"
-                BorderThickness="1"
-                Effect="{x:Null}">
+                BorderThickness="1">
+                <Border.Effect>
+                        <DropShadowEffect BlurRadius="20" ShadowDepth="0" Color="Black" Opacity="0.6"/>
+                </Border.Effect>
                 <Grid>
                         <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
@@ -426,7 +82,7 @@
                                                         </Style>
                                                 </Ellipse.Style>
                                         </Ellipse>
-                                        <!-- Speak status dot (gold, visible when interpreter connected) -->
+                                        <!-- Dot de status do intérprete (dourado, visível quando conectado) -->
                                         <Ellipse Width="8"
                                                  Height="8"
                                                  Fill="{StaticResource AccentGold}"
@@ -434,6 +90,15 @@
                                                  VerticalAlignment="Center"
                                                  ToolTip="{Binding SpeakStatusText}"
                                                  Visibility="{Binding IsSpeakConnected, Converter={StaticResource BoolToVis}}"/>
+                                        <!-- Dot pulsante dourado: indica que o intérprete está falando -->
+                                        <Ellipse x:Name="SpeakingDot"
+                                                 Width="8"
+                                                 Height="8"
+                                                 Fill="{StaticResource AccentGold}"
+                                                 Margin="4,0,0,0"
+                                                 VerticalAlignment="Center"
+                                                 ToolTip="Intérprete falando"
+                                                 Visibility="{Binding IsSpeaking, Converter={StaticResource BoolToVis}}"/>
                                         <!-- Analyzing label (pulsing) -->
                                         <TextBlock x:Name="AnalyzingLabel"
                                                    Text="🔄 Analisando..."
@@ -453,7 +118,8 @@
                                 </StackPanel>
 
                                 <!-- Subtitle text -->
-                                <TextBlock Grid.Column="1"
+                                <TextBlock x:Name="SubtitleBlock"
+                                           Grid.Column="1"
                                            Text="{Binding SubtitleText}"
                                            Foreground="{StaticResource TextPrimary}"
                                            FontSize="16"
@@ -530,9 +196,12 @@
                         </Grid>
 
                         <!-- ═══ ROW 1: SETTINGS PANEL (Tabs) ═══ -->
-                        <Border Grid.Row="1"
+                        <Border x:Name="SettingsPanel"
+                                Grid.Row="1"
                                 Background="{StaticResource BarBgSolid}"
-                                Visibility="{Binding IsSettingsVisible, Converter={StaticResource BoolToVis}}"
+                                Visibility="Visible"
+                                MaxHeight="0"
+                                ClipToBounds="True"
                                 BorderBrush="#22FFFFFF"
                                 BorderThickness="0,1,0,0">
                                 <TabControl Style="{StaticResource DarkTabControl}">
@@ -720,12 +389,14 @@
                         </Border>
 
                         <!-- ═══ ROW 2: HISTORY / CHAT DRAWER ═══ -->
-                        <Border Grid.Row="2"
+                        <Border x:Name="HistoryPanel"
+                                Grid.Row="2"
                                 Background="{StaticResource BarBgSolid}"
-                                Visibility="{Binding IsHistoryVisible, Converter={StaticResource BoolToVis}}"
+                                Visibility="Visible"
+                                MaxHeight="0"
+                                ClipToBounds="True"
                                 BorderBrush="#22FFFFFF"
-                                BorderThickness="0,1,0,0"
-                                MaxHeight="300">
+                                BorderThickness="0,1,0,0">
                                 <Grid>
                                         <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
@@ -736,18 +407,26 @@
                                         <!-- Header -->
                                         <Grid Grid.Row="0"
                                               Margin="14,8,14,4">
-                                                <TextBlock Text="HISTÓRICO DA CONVERSA"
-                                                           Foreground="{StaticResource AccentBlue}"
+                                                <TextBlock Foreground="{StaticResource AccentBlue}"
                                                            FontSize="10"
                                                            FontWeight="Bold"
                                                            FontFamily="Segoe UI"
-                                                           VerticalAlignment="Center"/>
-                                                <Button Style="{StaticResource BarButton}"
-                                                        Content="▲ Esconder"
-                                                        Click="ToggleHistory_Click"
-                                                        HorizontalAlignment="Right"
-                                                        Foreground="{StaticResource TextSecondary}"
-                                                        FontSize="10"/>
+                                                           VerticalAlignment="Center">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="HISTÓRICO ({0})">
+                                                            <Binding Path="History.Count"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                    <Button Style="{StaticResource BarButton}"
+                                                            Content="🗑 Limpar"
+                                                            Click="ClearHistory_Click"
+                                                            Margin="0,0,8,0"/>
+                                                    <Button Style="{StaticResource BarButton}"
+                                                            Content="▲ Esconder"
+                                                            Click="ToggleHistory_Click"/>
+                                                </StackPanel>
                                         </Grid>
 
                                         <!-- Conversation list -->

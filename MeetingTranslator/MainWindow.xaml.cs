@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Input;
@@ -11,6 +11,9 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
     private Storyboard? _pulseStoryboard;
+    private Storyboard? _slideDownStoryboard;
+    private Storyboard? _slideUpStoryboard;
+    private Storyboard? _subtitleFadeInStoryboard;
 
     public MainWindow()
     {
@@ -21,6 +24,12 @@ public partial class MainWindow : Window
         // Cache Storyboard — evita FindResource a cada toggle de IsAnalyzing
         _pulseStoryboard = (Storyboard)FindResource("PulseAnimation");
         Storyboard.SetTarget(_pulseStoryboard, AnalyzingLabel);
+
+        // Cache das novas storyboards
+        _slideDownStoryboard = (Storyboard)FindResource("SlideDownAnimation");
+        _slideUpStoryboard = (Storyboard)FindResource("SlideUpAnimation");
+        _subtitleFadeInStoryboard = (Storyboard)FindResource("SubtitleFadeIn");
+        Storyboard.SetTarget(_subtitleFadeInStoryboard, SubtitleBlock);
 
         // Auto-scroll history when new items are added
         _vm.History.CollectionChanged += (_, e) =>
@@ -66,6 +75,28 @@ public partial class MainWindow : Window
             {
                 _pulseStoryboard?.Stop();
             }
+        }
+        else if (e.PropertyName == nameof(MainViewModel.IsSettingsVisible))
+        {
+            var sb = _vm.IsSettingsVisible ? _slideDownStoryboard : _slideUpStoryboard;
+            if (sb != null)
+            {
+                Storyboard.SetTarget(sb, SettingsPanel);
+                sb.Begin();
+            }
+        }
+        else if (e.PropertyName == nameof(MainViewModel.IsHistoryVisible))
+        {
+            var sb = _vm.IsHistoryVisible ? _slideDownStoryboard : _slideUpStoryboard;
+            if (sb != null)
+            {
+                Storyboard.SetTarget(sb, HistoryPanel);
+                sb.Begin();
+            }
+        }
+        else if (e.PropertyName == nameof(MainViewModel.SubtitleText))
+        {
+            _subtitleFadeInStoryboard?.Begin();
         }
     }
 
@@ -113,6 +144,12 @@ public partial class MainWindow : Window
     private async void PreviewAzureVoice_Click(object sender, RoutedEventArgs e)
     {
         await _vm.PreviewSelectedAzureVoiceAsync();
+    }
+
+
+    private void ClearHistory_Click(object sender, RoutedEventArgs e)
+    {
+        _vm.ClearHistory();
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)

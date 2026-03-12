@@ -21,9 +21,9 @@ using System.Windows.Data;
 
 namespace MeetingTranslator.ViewModels;
 
-public class MainViewModel : INotifyPropertyChanged, IDisposable
+public partial class MainViewModel : INotifyPropertyChanged, IDisposable
 {
-    // --- Estado dos serviços ---
+    // --- Serviços ativos ---
     private OpenAiVoiceService? _voiceService;
     private AzureVoiceService? _azureVoiceService;
     private TextTranslationService? _transcriptionService;
@@ -37,7 +37,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     /// </summary>
     private readonly SharedAudioState _sharedAudioState = new();
 
-    // --- Propriedades de UI ---
+    // --- Propriedades de interface ---
     private string _subtitleText = "";
     public string SubtitleText
     {
@@ -102,23 +102,10 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             _selectedMode = value;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(IsVoiceMode));
-            OnPropertyChanged(nameof(IsTranscriptionMode));
             OnPropertyChanged(nameof(ModeDescription));
         }
     }
 
-    public bool IsVoiceMode
-    {
-        get => _selectedMode == TranslationMode.Voice;
-        set { if (value) SelectedMode = TranslationMode.Voice; }
-    }
-
-    public bool IsTranscriptionMode
-    {
-        get => _selectedMode == TranslationMode.Transcription;
-        set { if (value) SelectedMode = TranslationMode.Transcription; }
-    }
 
     public string ModeDescription => _selectedMode switch
     {
@@ -168,19 +155,11 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         set { _isAnalyzing = value; OnPropertyChanged(); }
     }
 
-    private string _inputText = "";
-    public string InputText
+    private bool _isSpeaking;
+    public bool IsSpeaking
     {
-        get => _inputText;
-        set
-        {
-            _inputText = value;
-            OnPropertyChanged();
-            if (SendMessageCommand is DelegateCommand cmd)
-            {
-                cmd.RaiseCanExecuteChanged();
-            }
-        }
+        get => _isSpeaking;
+        set { _isSpeaking = value; OnPropertyChanged(); }
     }
 
     // --- Intérprete ---
@@ -354,7 +333,7 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public bool HasSpeakDeviceWarning => !string.IsNullOrEmpty(SpeakDeviceWarning);
 
-    // --- Coleções ---
+    // --- Coleções de dados ---
     public ObservableCollection<AudioDeviceInfo> MicDevices { get; } = new();
     public ObservableCollection<AudioDeviceInfo> LoopbackDevices { get; } = new();
     public ObservableCollection<AudioDeviceInfo> SpeakOutputDevices { get; } = new();
@@ -394,30 +373,31 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
     // Acumulador de transcript parcial
     private string _partialTranscript = "";
 
-    // Throttle para partial transcripts
+    // Throttle para transcrições parciais
     private volatile string? _pendingPartialText;
     private volatile bool _partialUpdateScheduled;
-
-    // Log writer em background
-    private static readonly string _logBasePath = AppDomain.CurrentDomain.BaseDirectory;
-    private readonly Channel<(string FileName, string Line)> _logChannel =
-        Channel.CreateBounded<(string, string)>(new BoundedChannelOptions(1000)
-        {
-            SingleReader = true,
-            FullMode = BoundedChannelFullMode.DropOldest
-        });
-    private Task? _logWriterTask;
-    private readonly CancellationTokenSource _logCts = new();
     private bool _isDisposed;
 
-    public ICommand SendMessageCommand { get; }
+    public System.Windows.Input.ICommand CopyBubbleCommand { get; }
 
     public MainViewModel()
     {
         _dispatcher = Application.Current.Dispatcher;
         LoadEnvironmentVariables();
         LoadDevices();
-        SendMessageCommand = new DelegateCommand(_ => SendMessage(), _ => !string.IsNullOrWhiteSpace(InputText));
+        
+        CopyBubbleCommand = new DelegateCommand(obj => 
+        {
+            if (obj is MeetingTranslator.Models.ConversationEntry entry)
+            {
+                try
+                {
+                    System.Windows.Clipboard.SetText(entry.TranslatedText);
+                }
+                catch { /* Ignorar erro do clipboard */ }
+            }
+        });
+
         _logWriterTask = Task.Run(RunLogWriter);
 
         // View filtrável para as vozes do Azure
@@ -465,253 +445,16 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         _envInitialized = true;
     }
 
-    private void LoadDevices()
-    {
-        MicDevices.Clear();
-        foreach (var d in AudioHelper.GetInputDevices())
-            MicDevices.Add(d);
 
-        OnPropertyChanged(nameof(ShowOpenAiInterpreterSettings));
-        OnPropertyChanged(nameof(ShowAzureInterpreterSettings));
-
-        LoopbackDevices.Clear();
-        foreach (var d in AudioHelper.GetLoopbackDevices())
-            LoopbackDevices.Add(d);
-
-        SpeakOutputDevices.Clear();
-        foreach (var d in AudioHelper.GetOutputDevices())
-            SpeakOutputDevices.Add(d);
-
-        if (MicDevices.Count > 0) SelectedMicDevice = MicDevices[0];
-        if (LoopbackDevices.Count > 0) SelectedLoopbackDevice = LoopbackDevices[0];
-        if (MicDevices.Count > 0 && SelectedSpeakMicDevice == null) SelectedSpeakMicDevice = MicDevices[0];
-        if (SpeakOutputDevices.Count > 0) SelectedSpeakOutputDevice = SpeakOutputDevices[0];
-
-        // Preenche lista combinada de entrada (mic + loopback)
-        AllInputDevices.Clear();
-        foreach (var m in MicDevices)
-        {
-            AllInputDevices.Add(new CombinedInputDevice
-            {
-                DeviceIndex = m.DeviceIndex,
-                Name = $"🎤 {m.Name}",
-                IsMic = true,
-                IsLoopback = false
-            });
-        }
-        foreach (var l in LoopbackDevices)
-        {
-            AllInputDevices.Add(new CombinedInputDevice
-            {
-                DeviceIndex = l.DeviceIndex,
-                Name = $"🔊 {l.Name}",
-                IsMic = false,
-                IsLoopback = true
-            });
-        }
-
-        // Define padrão: prioriza microfone, senão loopback
-        if (MicDevices.Count > 0)
-        {
-            SelectedInputDevice = AllInputDevices.FirstOrDefault(x => x.IsMic);
-        }
-        else if (LoopbackDevices.Count > 0)
-        {
-            SelectedInputDevice = AllInputDevices.FirstOrDefault(x => x.IsLoopback);
-        }
-    }
-
-    // --- Comandos ---
-    public async Task ToggleConnectionAsync()
-    {
-        if (IsConnected)
-        {
-            await DisconnectAsync();
-        }
-        else
-        {
-            await ConnectAsync();
-        }
-    }
-
-    private async Task ConnectAsync()
-    {
-        LoadEnvironmentVariables();
-
-        try
-        {
-            if (_useAzureProvider)
-            {
-                if (string.IsNullOrWhiteSpace(AzureSpeechKey) || string.IsNullOrWhiteSpace(AzureSpeechRegion))
-                {
-                    StatusText = "⚠ AZURE_SPEECH_KEY/REGION não configuradas no .env";
-                    return;
-                }
-
-                if (SelectedMode == TranslationMode.Voice)
-                    await ConnectAzureVoiceModeAsync();
-                else
-                    await ConnectAzureTranscriptionAsync();
-            }
-            else
-            {
-                var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-                if (string.IsNullOrWhiteSpace(apiKey))
-                {
-                    StatusText = "⚠ OPENAI_API_KEY não encontrada";
-                    return;
-                }
-
-                if (SelectedMode == TranslationMode.Voice)
-                    await ConnectVoiceModeAsync(apiKey);
-                else
-                    await ConnectTranscriptionModeAsync(apiKey);
-            }
-
-            IsConnected = true;
-            StatusText = "Pronto — ouvindo...";
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"⚠ Erro: {ex.Message}";
-        }
-    }
-
-    private async Task ConnectVoiceModeAsync(string apiKey)
-    {
-        _voiceService = new OpenAiVoiceService(apiKey, _sharedAudioState);
-
-        _voiceService.TranscriptReceived += OnTranscriptReceived;
-        _voiceService.StatusChanged += OnStatusChanged;
-        _voiceService.ErrorOccurred += OnError;
-        _voiceService.AnalyzingChanged += OnAnalyzingChanged;
-
-        await _voiceService.StartAsync(
-            SelectedMicDevice?.DeviceIndex ?? 0,
-            SelectedLoopbackDevice?.DeviceIndex ?? 0,
-            UseMic,
-            UseLoopback
-        );
-    }
-
-    private async Task ConnectTranscriptionModeAsync(string apiKey)
-    {
-        _transcriptionService = new TextTranslationService(apiKey);
-
-        _transcriptionService.TranscriptReceived += OnTranscriptReceived;
-        _transcriptionService.StatusChanged += OnStatusChanged;
-        _transcriptionService.ErrorOccurred += OnError;
-        _transcriptionService.AnalyzingChanged += OnAnalyzingChanged;
-
-        await _transcriptionService.StartAsync(
-            SelectedMicDevice?.DeviceIndex ?? 0,
-            SelectedLoopbackDevice?.DeviceIndex ?? 0,
-            UseMic,
-            UseLoopback
-        );
-    }
-
-    private async Task ConnectAzureTranscriptionAsync()
-    {
-        _azureTranscriptionService = new AzureTranscriptionService(AzureSpeechKey, AzureSpeechRegion);
-
-        _azureTranscriptionService.TranscriptReceived += OnTranscriptReceived;
-        _azureTranscriptionService.StatusChanged += OnStatusChanged;
-        _azureTranscriptionService.ErrorOccurred += OnError;
-        _azureTranscriptionService.AnalyzingChanged += OnAnalyzingChanged;
-
-        await _azureTranscriptionService.StartAsync(
-            SelectedMicDevice?.DeviceIndex ?? 0,
-            SelectedLoopbackDevice?.DeviceIndex ?? 0,
-            UseMic,
-            UseLoopback
-        );
-    }
-
-    private async Task ConnectAzureVoiceModeAsync()
-    {
-        _azureVoiceService = new AzureVoiceService(AzureSpeechKey, AzureSpeechRegion, _sharedAudioState);
-
-        // Força EN -> PT-BR para ambos os fluxos (requisito da Entrada)
-        _azureVoiceService.SetDirections("en-US", "pt-BR", "en-US", "pt-BR");
-
-        // Aplica a voz selecionada para ambos (independe de qual entrada foi escolhida)
-        if (!string.IsNullOrWhiteSpace(AzureSpeechVoice))
-        {
-            _azureVoiceService.SetBothVoices(AzureSpeechVoice);
-        }
-
-        _azureVoiceService.TranscriptReceived += OnTranscriptReceived;
-        _azureVoiceService.StatusChanged += OnStatusChanged;
-        _azureVoiceService.ErrorOccurred += OnError;
-        _azureVoiceService.AnalyzingChanged += OnAnalyzingChanged;
-
-        await _azureVoiceService.StartAsync(
-            SelectedMicDevice?.DeviceIndex ?? 0,
-            SelectedLoopbackDevice?.DeviceIndex ?? 0,
-            UseMic,
-            UseLoopback
-        );
-    }
-
-    private async Task DisconnectAsync()
-    {
-        if (_voiceService != null)
-        {
-            _voiceService.TranscriptReceived -= OnTranscriptReceived;
-            _voiceService.StatusChanged -= OnStatusChanged;
-            _voiceService.ErrorOccurred -= OnError;
-            _voiceService.AnalyzingChanged -= OnAnalyzingChanged;
-
-            await _voiceService.StopAsync();
-            _voiceService.Dispose();
-            _voiceService = null;
-        }
-
-        if (_transcriptionService != null)
-        {
-            _transcriptionService.TranscriptReceived -= OnTranscriptReceived;
-            _transcriptionService.StatusChanged -= OnStatusChanged;
-            _transcriptionService.ErrorOccurred -= OnError;
-            _transcriptionService.AnalyzingChanged -= OnAnalyzingChanged;
-
-            await _transcriptionService.StopAsync();
-            _transcriptionService.Dispose();
-            _transcriptionService = null;
-        }
-
-        if (_azureVoiceService != null)
-        {
-            _azureVoiceService.TranscriptReceived -= OnTranscriptReceived;
-            _azureVoiceService.StatusChanged -= OnStatusChanged;
-            _azureVoiceService.ErrorOccurred -= OnError;
-            _azureVoiceService.AnalyzingChanged -= OnAnalyzingChanged;
-
-            await _azureVoiceService.StopAsync();
-            _azureVoiceService.Dispose();
-            _azureVoiceService = null;
-        }
-
-        if (_azureTranscriptionService != null)
-        {
-            _azureTranscriptionService.TranscriptReceived -= OnTranscriptReceived;
-            _azureTranscriptionService.StatusChanged -= OnStatusChanged;
-            _azureTranscriptionService.ErrorOccurred -= OnError;
-            _azureTranscriptionService.AnalyzingChanged -= OnAnalyzingChanged;
-
-            await _azureTranscriptionService.StopAsync();
-            _azureTranscriptionService.Dispose();
-            _azureTranscriptionService = null;
-        }
-
-        IsConnected = false;
-        SubtitleText = "";
-        StatusText = "Desconectado";
-    }
 
     public void ToggleHistory()
     {
         IsHistoryVisible = !IsHistoryVisible;
+    }
+
+    public void ClearHistory()
+    {
+        History.Clear();
     }
 
     public void ToggleSettings()
@@ -806,380 +549,6 @@ public class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public void RefreshDevices()
-    {
-        LoadDevices();
-    }
-
-    // --- Intérprete ---
-    public async Task ToggleSpeakConnectionAsync()
-    {
-        if (IsSpeakConnected)
-            await DisconnectSpeakAsync();
-        else
-            await ConnectSpeakAsync();
-    }
-
-    private async Task ConnectSpeakAsync()
-    {
-        LoadEnvironmentVariables();
-
-        try
-        {
-            _speakService = CreateInterpreterService();
-            if (_speakService == null)
-                return;
-
-            _speakService.StatusChanged += OnSpeakStatusChanged;
-            _speakService.ErrorOccurred += OnSpeakError;
-            _speakService.SpeakingChanged += OnSpeakingChanged;
-
-            await _speakService.StartAsync(
-                SelectedSpeakMicDevice?.DeviceIndex ?? 0,
-                SelectedSpeakOutputDevice?.DeviceIndex ?? 0
-            );
-
-            IsSpeakConnected = true;
-        }
-        catch (Exception ex)
-        {
-            var detailedMessage = ex.InnerException == null
-                ? ex.Message
-                : $"{ex.Message} | Inner: {ex.InnerException.Message}";
-
-            _logChannel.Writer.TryWrite(("error.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [SpeakStart] {ex}"));
-            SpeakStatusText = $"⚠ Erro ao iniciar intérprete: {detailedMessage}";
-        }
-    }
-
-    // --- Azure voices: load + preview ---
-    public async Task LoadAzureVoicesAsync(string? localeFilter = null)
-    {
-        try
-        {
-            IsAzureBusy = true;
-
-            var speechKey = string.IsNullOrWhiteSpace(AzureSpeechKey)
-                ? Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY")
-                : AzureSpeechKey;
-            var speechRegion = string.IsNullOrWhiteSpace(AzureSpeechRegion)
-                ? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION")
-                : AzureSpeechRegion;
-
-            if (string.IsNullOrWhiteSpace(speechKey) || string.IsNullOrWhiteSpace(speechRegion))
-            {
-                SpeakStatusText = "⚠ Configure AZURE_SPEECH_KEY e AZURE_SPEECH_REGION";
-                return;
-            }
-
-            var list = await Services.Azure.AzureVoiceCatalogService
-                .GetVoicesAsync(speechKey!, speechRegion!, localeFilter ?? string.Empty)
-                .ConfigureAwait(false);
-
-            await _dispatcher.InvokeAsync(() =>
-            {
-                AzureVoices.Clear();
-                foreach (var v in list)
-                    AzureVoices.Add(v);
-
-                // Atualiza view para aplicar filtro atual
-                AzureVoicesView.Refresh();
-
-                // Auto-select if current voice matches
-                if (!string.IsNullOrWhiteSpace(AzureSpeechVoice))
-                {
-                    var match = AzureVoices.FirstOrDefault(v => v.ShortName.Equals(AzureSpeechVoice, StringComparison.OrdinalIgnoreCase));
-                    if (match != null)
-                        SelectedAzureVoice = match;
-                }
-
-                StatusText = $"Vozes Azure: {AzureVoices.Count}";
-            });
-        }
-        catch (Exception ex)
-        {
-            SpeakStatusText = $"⚠ Erro ao listar vozes: {ex.Message}";
-        }
-        finally
-        {
-            IsAzureBusy = false;
-        }
-    }
-
-    public async Task PreviewSelectedAzureVoiceAsync()
-    {
-        var voice = SelectedAzureVoice?.ShortName ?? AzureSpeechVoice;
-        if (string.IsNullOrWhiteSpace(voice))
-        {
-            SpeakStatusText = "⚠ Selecione uma voz";
-            return;
-        }
-
-        var speechKey = string.IsNullOrWhiteSpace(AzureSpeechKey)
-            ? Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY")
-            : AzureSpeechKey;
-        var speechRegion = string.IsNullOrWhiteSpace(AzureSpeechRegion)
-            ? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION")
-            : AzureSpeechRegion;
-
-        if (string.IsNullOrWhiteSpace(speechKey) || string.IsNullOrWhiteSpace(speechRegion))
-        {
-            SpeakStatusText = "⚠ Configure AZURE_SPEECH_KEY e AZURE_SPEECH_REGION";
-            return;
-        }
-
-        try
-        {
-            IsAzureBusy = true;
-            await Services.Azure.AzureVoiceCatalogService
-                .PlayPreviewAsync(speechKey!, speechRegion!, voice!)
-                .ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            SpeakStatusText = $"⚠ Erro na previa: {ex.Message}";
-        }
-        finally
-        {
-            IsAzureBusy = false;
-        }
-    }
-
-    private async Task ApplySelectedVoiceToActiveServicesAsync()
-    {
-        try
-        {
-            if (_azureVoiceService != null && !string.IsNullOrWhiteSpace(AzureSpeechVoice))
-            {
-                // Aplica para ambos para manter consistência
-                _azureVoiceService.SetBothVoices(AzureSpeechVoice);
-
-                if (IsConnected && _useAzureProvider && SelectedMode == TranslationMode.Voice)
-                {
-                    await _azureVoiceService.StopAsync().ConfigureAwait(false);
-                    await _azureVoiceService.StartAsync(
-                        SelectedMicDevice?.DeviceIndex ?? 0,
-                        SelectedLoopbackDevice?.DeviceIndex ?? 0,
-                        UseMic,
-                        UseLoopback
-                    ).ConfigureAwait(false);
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"⚠ Erro ao aplicar voz: {ex.Message}";
-        }
-    }
-
-    private IInterpreterService? CreateInterpreterService()
-    {
-        switch (SelectedInterpreterProvider)
-        {
-            case InterpreterProvider.OpenAI:
-                var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-                if (string.IsNullOrWhiteSpace(apiKey))
-                {
-                    SpeakStatusText = "⚠ OPENAI_API_KEY nao encontrada";
-                    return null;
-                }
-                return new OpenAiInterpreterAdapter(apiKey, _sharedAudioState);
-
-            case InterpreterProvider.AzureSpeech:
-                var speechKey = string.IsNullOrWhiteSpace(AzureSpeechKey)
-                    ? Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY")
-                    : AzureSpeechKey;
-                var speechRegion = string.IsNullOrWhiteSpace(AzureSpeechRegion)
-                    ? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION")
-                    : AzureSpeechRegion;
-                var speechVoice = string.IsNullOrWhiteSpace(AzureSpeechVoice)
-                    ? Environment.GetEnvironmentVariable("AZURE_SPEECH_VOICE")
-                    : AzureSpeechVoice;
-                if (string.IsNullOrWhiteSpace(speechKey) || string.IsNullOrWhiteSpace(speechRegion))
-                {
-                    SpeakStatusText = "⚠ Configure AZURE_SPEECH_KEY e AZURE_SPEECH_REGION no .env para usar o interprete Azure";
-                    return null;
-                }
-                return new AzureSpeechInterpreterService(speechKey, speechRegion, _sharedAudioState, speechVoice);
-
-            default:
-                SpeakStatusText = "⚠ Provedor de interprete invalido";
-                return null;
-        }
-    }
-
-    private async Task DisconnectSpeakAsync()
-    {
-        if (_speakService != null)
-        {
-            _speakService.StatusChanged -= OnSpeakStatusChanged;
-            _speakService.ErrorOccurred -= OnSpeakError;
-            _speakService.SpeakingChanged -= OnSpeakingChanged;
-
-            await _speakService.StopAsync();
-            _speakService.Dispose();
-            _speakService = null;
-        }
-
-        IsSpeakConnected = false;
-        SpeakStatusText = "";
-    }
-
-    private void SendMessage()
-    {
-        var text = InputText.Trim();
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-
-        History.Add(new ConversationEntry
-        {
-            Speaker = Speaker.You,
-            TranslatedText = text
-        });
-
-        InputText = string.Empty;
-    }
-    // --- Log writer ---
-    private async Task RunLogWriter()
-    {
-        var writers = new Dictionary<string, StreamWriter>();
-        try
-        {
-            await foreach (var (fileName, line) in _logChannel.Reader.ReadAllAsync(_logCts.Token).ConfigureAwait(false))
-            {
-                var fullPath = Path.Combine(_logBasePath, fileName);
-                if (!writers.TryGetValue(fileName, out var writer))
-                {
-                    writer = new StreamWriter(fullPath, append: true) { AutoFlush = false };
-                    writers[fileName] = writer;
-                }
-                await writer.WriteLineAsync(line).ConfigureAwait(false);
-                Console.WriteLine(line);
-
-                // Flush quando o channel estiver vazio (batch completo)
-                if (!_logChannel.Reader.TryPeek(out _))
-                {
-                    foreach (var w in writers.Values)
-                        await w.FlushAsync().ConfigureAwait(false);
-                }
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch { /* best-effort logging */ }
-        finally
-        {
-            foreach (var w in writers.Values)
-            {
-                try { await w.FlushAsync(); w.Dispose(); } catch { }
-            }
-        }
-    }
-    // --- Event handlers ---
-    private void OnTranscriptReceived(object? sender, TranscriptEventArgs e)
-    {
-        // Log via channel batched
-        var logLine =
-            $"[{DateTime.Now:HH:mm:ss}] IsPartial={e.IsPartial}, Speaker={e.Speaker}, Original=\"{e.OriginalText}\", Translated=\"{e.TranslatedText}\"";
-        _logChannel.Writer.TryWrite(("transcripts.log", logLine));
-
-        if (e.IsPartial)
-        {
-            // Throttle: guarda o texto mais recente e agenda UM único dispatch
-            _pendingPartialText = e.TranslatedText;
-
-            if (!_partialUpdateScheduled)
-            {
-                _partialUpdateScheduled = true;
-                _dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, () =>
-                {
-                    _partialUpdateScheduled = false;
-                    var text = _pendingPartialText;
-                    if (text != null)
-                    {
-                        IsAnalyzing = false;
-                        IsAssistantTyping = true;
-                        _partialTranscript = text;
-                        SubtitleText = text;
-                    }
-                });
-            }
-        }
-        else
-        {
-            // Final transcript — prioridade normal, sempre entrega
-            var translatedText = e.TranslatedText;
-            var originalText = e.OriginalText;
-            var speaker = e.Speaker;
-
-            _dispatcher.BeginInvoke(() =>
-            {
-                IsAnalyzing = false;
-                IsAssistantTyping = false;
-                _pendingPartialText = null;
-
-                var finalText = string.IsNullOrEmpty(translatedText) ? _partialTranscript : translatedText;
-
-                SubtitleText = finalText;
-
-                if (!string.IsNullOrWhiteSpace(finalText))
-                {
-                    History.Add(new ConversationEntry
-                    {
-                        Speaker = speaker,
-                        OriginalText = originalText ?? "",
-                        TranslatedText = finalText
-                    });
-                }
-
-                _partialTranscript = "";
-            });
-        }
-    }
-
-    private void OnAnalyzingChanged(object? sender, bool isAnalyzing)
-    {
-        _dispatcher.BeginInvoke(() =>
-        {
-            IsAnalyzing = isAnalyzing;
-        });
-    }
-
-    private void OnStatusChanged(object? sender, StatusEventArgs e)
-    {
-        _dispatcher.BeginInvoke(() => StatusText = e.Message);
-    }
-
-    private void OnError(object? sender, StatusEventArgs e)
-    {
-        // Log via channel batched
-        var errorMsg = e.Message;
-        _logChannel.Writer.TryWrite(("error.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {errorMsg}"));
-
-        _dispatcher.BeginInvoke(() =>
-        {
-            IsAnalyzing = false;
-            StatusText = $"⚠ {errorMsg}";
-        });
-    }
-
-    // --- Speak event handlers ---
-    private void OnSpeakStatusChanged(object? sender, StatusEventArgs e)
-    {
-        _dispatcher.BeginInvoke(() => SpeakStatusText = e.Message);
-    }
-
-    private void OnSpeakError(object? sender, StatusEventArgs e)
-    {
-        _logChannel.Writer.TryWrite(("error.log", $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [Speak] {e.Message}"));
-        _dispatcher.BeginInvoke(() => SpeakStatusText = $"⚠ {e.Message}");
-    }
-
-    private void OnSpeakingChanged(object? sender, bool isSpeaking)
-    {
-        // Reservado para indicadores visuais futuros
-    }
 
     // --- INotifyPropertyChanged ---
     public event PropertyChangedEventHandler? PropertyChanged;
