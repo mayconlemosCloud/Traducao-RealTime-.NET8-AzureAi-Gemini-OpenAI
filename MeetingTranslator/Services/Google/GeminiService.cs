@@ -10,7 +10,7 @@ public class GeminiService
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
-    private const string ApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent";
+    private const string ApiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
 
     public GeminiService()
     {
@@ -84,6 +84,7 @@ public class GeminiService
         try
         {
             var url = $"{ApiUrl}?key={_apiKey}";
+            System.Diagnostics.Debug.WriteLine($"[Gemini] Enviando requisição POST para: {ApiUrl}");
             
             // Usando opções personalizadas para garantir que o body seja serializado em camelCase
             var options = new JsonSerializerOptions 
@@ -92,21 +93,33 @@ public class GeminiService
                 DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
             };
 
+            var jsonContent = JsonSerializer.Serialize(request, options);
+            System.Diagnostics.Debug.WriteLine($"[Gemini] Payload JSON (primeiros 200 chars): {jsonContent.Substring(0, Math.Min(200, jsonContent.Length))}...");
+
             var response = await _httpClient.PostAsJsonAsync(url, request, options);
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
+                System.Diagnostics.Debug.WriteLine($"[Gemini] ERRO DA API ({response.StatusCode}): {errorContent}");
                 return $"Erro do Gemini ({response.StatusCode}): {errorContent}";
             }
 
             var result = await response.Content.ReadFromJsonAsync<GenerateContentResponse>(options);
             
-            return result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text 
-                   ?? "Nenhuma resposta gerada pela inteligência artificial.";
+            string? textResponse = result?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
+            
+            if (string.IsNullOrEmpty(textResponse))
+            {
+                System.Diagnostics.Debug.WriteLine("[Gemini] Resposta vazia ou sem texto.");
+                return "Nenhuma resposta gerada pela inteligência artificial.";
+            }
+
+            return textResponse;
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[Gemini] EXCEÇÃO DE REDE: {ex.Message}\n{ex.StackTrace}");
             return $"Erro de comunicação com Gemini: {ex.Message}";
         }
     }

@@ -22,8 +22,9 @@ public class Base64ToImageConverter : IValueConverter
                 bi.EndInit();
                 return bi;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"[Converter] Erro ao converter Base64 para Image: {ex.Message}");
                 return null;
             }
         }

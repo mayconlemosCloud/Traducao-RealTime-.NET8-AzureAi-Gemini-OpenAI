@@ -524,17 +524,8 @@
                                             <StackPanel>
                                                 <!-- Image Attachment Preview -->
                                                 <Border x:Name="CapturePreviewBorder" CornerRadius="12" Background="#1AFFFFFF" Padding="8" Margin="0,0,0,12" MaxHeight="100" HorizontalAlignment="Left"
-                                                        BorderBrush="{StaticResource AccentGold}" BorderThickness="1.5">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Visibility" Value="Collapsed"/>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding PendingScreenshotBase64, Converter={StaticResource StringToVis}}" Value="Visible">
-                                                                    <Setter Property="Visibility" Value="Visible"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
+                                                        BorderBrush="{StaticResource AccentGold}" BorderThickness="1.5"
+                                                        Visibility="{Binding PendingScreenshotBase64, Converter={StaticResource StringToVis}}">
                                                     <Border.Effect>
                                                         <DropShadowEffect BlurRadius="12" Opacity="0.4" Color="#FFFFAA00" ShadowDepth="0"/>
                                                     </Border.Effect>

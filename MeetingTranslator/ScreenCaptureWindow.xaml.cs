@@ -66,12 +66,16 @@ public partial class ScreenCaptureWindow : Window
             CaptureCanvas.ReleaseMouseCapture();
             SelectionRectangle.Visibility = Visibility.Hidden;
 
-            int screenWidth = (int)SelectionRectangle.Width;
-            int screenHeight = (int)SelectionRectangle.Height;
+            double width = SelectionRectangle.Width;
+            double height = SelectionRectangle.Height;
+            double left = System.Windows.Controls.Canvas.GetLeft(SelectionRectangle);
+            double top = System.Windows.Controls.Canvas.GetTop(SelectionRectangle);
 
-            if (screenWidth > 0 && screenHeight > 0)
+            System.Diagnostics.Debug.WriteLine($"[Capture] MouseUp detectado. Seleção: L={left}, T={top}, W={width}, H={height}");
+
+            if (width > 5 && height > 5)
             {
-                // Obter as coordenadas físicas se houver diferença de DPI ANTES de esconder a janela
+                // Obter as coordenadas físicas se houver diferença de DPI
                 PresentationSource source = PresentationSource.FromVisual(this);
                 double dpiX = 1.0, dpiY = 1.0;
                 
@@ -82,51 +86,69 @@ public partial class ScreenCaptureWindow : Window
                 }
                 else
                 {
-                    // Fallback para DPI padrão
                     dpiX = VisualTreeHelper.GetDpi(this).DpiScaleX;
                     dpiY = VisualTreeHelper.GetDpi(this).DpiScaleY;
                 }
 
-                // Coordenadas relativas ao Canvas (que cobre todo o VirtualScreen)
-                double left = System.Windows.Controls.Canvas.GetLeft(SelectionRectangle);
-                double top = System.Windows.Controls.Canvas.GetTop(SelectionRectangle);
+                System.Diagnostics.Debug.WriteLine($"[Capture] DPI Detectado: X={dpiX}, Y={dpiY}");
 
-                this.Hide(); 
+                // Coordenadas absolutas na tela virtual
+                double virtualLeft = this.Left + left;
+                double virtualTop = this.Top + top;
 
-                // Aguarda a janela ser removida visualmente da composição do Desktop
-                await System.Threading.Tasks.Task.Delay(100); 
-
-                // Converter coordenadas lógicas (WPF) para coordenadas de tela reais (físicas)
-                var screenX = (int)((this.Left + left) * dpiX);
-                var screenY = (int)((this.Top + top) * dpiY);
-
-                int physicalWidth = (int)(screenWidth * dpiX);
-                int physicalHeight = (int)(screenHeight * dpiY);
+                // Deixa a janela invisível mas ativa para não interromper ShowDialog()
+                this.Opacity = 0; 
+                this.IsHitTestVisible = false; // Evita cliques extras enquanto processa
+                await System.Threading.Tasks.Task.Delay(150); 
 
                 try
                 {
-                    using (var bitmap = new Bitmap(physicalWidth, physicalHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+                    // Processamento pesado em Task.Run para não travar dispatcher
+                    Base64CapturedImage = await Task.Run(() => 
                     {
-                        using (var graphics = Graphics.FromImage(bitmap))
-                        {
-                            graphics.CopyFromScreen(screenX, screenY, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
-                        }
+                        int screenX = (int)(virtualLeft * dpiX);
+                        int screenY = (int)(virtualTop * dpiY);
+                        int physicalWidth = (int)(width * dpiX);
+                        int physicalHeight = (int)(height * dpiY);
 
-                        using (var ms = new MemoryStream())
+                        using (var bitmap = new Bitmap(physicalWidth, physicalHeight, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
                         {
-                            bitmap.Save(ms, ImageFormat.Png);
-                            Base64CapturedImage = Convert.ToBase64String(ms.ToArray());
-                            System.Diagnostics.Debug.WriteLine($"[Capture] Sucesso! Base64 length: {Base64CapturedImage.Length}");
+                            using (var graphics = Graphics.FromImage(bitmap))
+                            {
+                                graphics.CopyFromScreen(screenX, screenY, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
+                            }
+
+                            using (var ms = new MemoryStream())
+                            {
+                                bitmap.Save(ms, ImageFormat.Png);
+                                var base64 = Convert.ToBase64String(ms.ToArray());
+                                return base64;
+                            }
                         }
-                    }
+                    });
+
+                    System.Diagnostics.Debug.WriteLine($"[Capture] Sucesso Gerando Base64. Tamanho: {Base64CapturedImage?.Length ?? 0}");
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"[Capture] Erro ao capturar: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine($"[Capture] Erro CRÍTICO no processamento do Bitmap: {ex.Message}\n{ex.StackTrace}");
+                    Base64CapturedImage = null;
                 }
             }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[Capture] Seleção muito pequena, ignorando.");
+                Base64CapturedImage = null;
+            }
 
-            this.DialogResult = true;
+            if (string.IsNullOrEmpty(Base64CapturedImage))
+            {
+                this.DialogResult = false;
+            }
+            else
+            {
+                this.DialogResult = true;
+            }
             this.Close();
         }
     }

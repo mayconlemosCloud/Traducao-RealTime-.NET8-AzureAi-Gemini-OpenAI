@@ -51,12 +51,18 @@ public partial class MainViewModel
         if (IsAiProcessing || (string.IsNullOrWhiteSpace(AiPrompt) && string.IsNullOrEmpty(PendingScreenshotBase64))) 
             return;
 
+        System.Diagnostics.Debug.WriteLine($"[AI] Iniciando fluxo SendAiMessageAsync. Prompt length: {AiPrompt.Length}, HasImage: {!string.IsNullOrEmpty(PendingScreenshotBase64)}");
+
         var prompt = AiPrompt;
         var base64Image = PendingScreenshotBase64;
 
+        if (!string.IsNullOrEmpty(base64Image))
+        {
+            System.Diagnostics.Debug.WriteLine($"[AI] Imagem detectada. Tamanho Base64: {base64Image.Length}");
+        }
+
         // Limpa a UI para o próximo envio
         AiPrompt = "";
-        PendingScreenshotBase64 = null;
 
         // Adiciona a mensagem do usuário ao histórico localmente
         History.Add(new Models.ConversationEntry
@@ -66,6 +72,9 @@ public partial class MainViewModel
             OriginalText = "Prompt Enviado",
             AttachedImageBase64 = base64Image
         });
+
+        // Agora limpamos a imagem pendente da UI central
+        PendingScreenshotBase64 = null;
 
         IsAiProcessing = true;
         
@@ -83,12 +92,12 @@ public partial class MainViewModel
             if (!string.IsNullOrEmpty(base64Image))
             {
                 var finalPrompt = string.IsNullOrWhiteSpace(prompt) ? "Analise e descreva esta imagem." : prompt;
+                System.Diagnostics.Debug.WriteLine($"[AI] Chamando AnalyzeImageAsync com prompt: {finalPrompt}");
                 response = await Gemini.AnalyzeImageAsync(finalPrompt, base64Image);
             }
             else
             {
-                // Se for só texto, queremos passar o contexto das conversas?
-                // Vamos enviar o prompt junto com todo o histórico recente como contexto
+                System.Diagnostics.Debug.WriteLine($"[AI] Chamando AnalyzeTextAsync...");
                 var sb = new StringBuilder();
                 sb.AppendLine("Contexto prévio do chat:");
                 foreach (var item in History.TakeLast(20).Where(x => !x.IsThinking))
@@ -104,6 +113,8 @@ public partial class MainViewModel
                 response = await Gemini.AnalyzeTextAsync(sb.ToString());
             }
 
+            System.Diagnostics.Debug.WriteLine($"[AI] Resposta recebida do Gemini (length: {response.Length})");
+
             // Atualiza a bolha que estava pensando com o texto real
             var index = History.IndexOf(thinkingEntry);
             if (index != -1)
@@ -118,13 +129,16 @@ public partial class MainViewModel
         }
         catch (Exception ex)
         {
+            string errorDetail = ex.InnerException != null ? $" | Interno: {ex.InnerException.Message}" : "";
+            System.Diagnostics.Debug.WriteLine($"[AI] CRITICAL ERROR em SendAiMessageAsync: {ex.Message}{errorDetail}\nStack: {ex.StackTrace}");
+            
             var index = History.IndexOf(thinkingEntry);
             if (index != -1)
             {
                 History[index] = new Models.ConversationEntry
                 {
                     Speaker = Models.Speaker.AI,
-                    TranslatedText = $"⚠️ Erro ao consultar Gemini: {ex.Message}"
+                    TranslatedText = $"⚠️ Erro ao consultar Gemini: {ex.Message}{errorDetail}"
                 };
             }
         }

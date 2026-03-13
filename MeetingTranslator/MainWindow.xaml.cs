@@ -175,20 +175,37 @@ public partial class MainWindow : Window
     
     private void CaptureScreen_Click(object sender, RoutedEventArgs e)
     {
-        var screenWindow = new ScreenCaptureWindow();
-        if (screenWindow.ShowDialog() == true && !string.IsNullOrEmpty(screenWindow.Base64CapturedImage))
+        try
         {
-            var base64 = screenWindow.Base64CapturedImage;
-            
-            // Guarda a imagem pendente no ViewModel e abre o chat
-            _vm.PendingScreenshotBase64 = base64;
-            _vm.AiPrompt = ""; // Limpa prompt para focar na imagem
-            
-            // Abre o drawer de histórico/chat
-            if (!_vm.IsHistoryVisible)
+            System.Diagnostics.Debug.WriteLine("[UI] Botão Captura clicado.");
+            var screenWindow = new ScreenCaptureWindow();
+            bool result = screenWindow.ShowDialog() == true;
+            System.Diagnostics.Debug.WriteLine($"[UI] ShowDialog retornou: {result}");
+
+            if (result && !string.IsNullOrEmpty(screenWindow.Base64CapturedImage))
             {
-                _vm.ToggleHistory();
+                var base64 = screenWindow.Base64CapturedImage;
+                System.Diagnostics.Debug.WriteLine($"[UI] Captura confirmada. Base64 len: {base64.Length}");
+                
+                // Guarda a imagem pendente no ViewModel
+                _vm.PendingScreenshotBase64 = base64;
+                _vm.AiPrompt = ""; // Limpa prompt para focar na imagem
+                
+                // Abre o drawer de histórico/chat se estiver fechado
+                if (!_vm.IsHistoryVisible)
+                {
+                    _vm.ToggleHistory();
+                }
             }
+            else
+            {
+                System.Diagnostics.Debug.WriteLine("[UI] Captura cancelada ou vazia.");
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[UI] Erro ao abrir captura: {ex.Message}");
+            MessageBox.Show($"Erro ao iniciar captura: {ex.Message}", "Erro de Captura", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
