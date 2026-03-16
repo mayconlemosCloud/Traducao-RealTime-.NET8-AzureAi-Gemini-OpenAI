@@ -162,6 +162,13 @@ public partial class MainViewModel : INotifyPropertyChanged, IDisposable
         set { _isSpeaking = value; OnPropertyChanged(); }
     }
 
+    private bool _isStealthModeActive = false;
+    public bool IsStealthModeActive
+    {
+        get => _isStealthModeActive;
+        set { _isStealthModeActive = value; OnPropertyChanged(); }
+    }
+
     // --- Intérprete ---
     private bool _isSpeakFeatureEnabled;
     public bool IsSpeakFeatureEnabled
@@ -370,8 +377,9 @@ public partial class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    // Acumulador de transcript parcial
-    private string _partialTranscript = "";
+    // Acumuladores de transcript parcial (separados por speaker para evitar atropelo)
+    private string _partialTranscriptYou = "";
+    private string _partialTranscriptThem = "";
 
     // Throttle para transcrições parciais
     private volatile string? _pendingPartialText;

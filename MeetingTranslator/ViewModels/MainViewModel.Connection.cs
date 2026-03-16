@@ -208,8 +208,17 @@ public partial class MainViewModel
 
         if (e.IsPartial)
         {
+            // No modo Transcrição, mostramos o OriginalText (pt-BR ou en-US) para feedback instantâneo.
+            // A tradução geralmente demora mais para chegar ou mudar.
+            string textToShow = (SelectedMode == TranslationMode.Transcription && !string.IsNullOrWhiteSpace(e.OriginalText))
+                ? e.OriginalText
+                : e.TranslatedText;
+
             // Throttle: guarda o texto mais recente e agenda UM único dispatch
-            _pendingPartialText = e.TranslatedText;
+            _pendingPartialText = textToShow;
+
+            if (e.Speaker == Speaker.You) _partialTranscriptYou = textToShow;
+            else _partialTranscriptThem = textToShow;
 
             if (!_partialUpdateScheduled)
             {
@@ -222,7 +231,6 @@ public partial class MainViewModel
                     {
                         IsAnalyzing = false;
                         IsAssistantTyping = true;
-                        _partialTranscript = text;
                         SubtitleText = text;
                     }
                 });
@@ -241,7 +249,8 @@ public partial class MainViewModel
                 IsAssistantTyping = false;
                 _pendingPartialText = null;
 
-                var finalText = string.IsNullOrEmpty(translatedText) ? _partialTranscript : translatedText;
+                var lastPartial = (speaker == Speaker.You) ? _partialTranscriptYou : _partialTranscriptThem;
+                var finalText = string.IsNullOrEmpty(translatedText) ? lastPartial : translatedText;
 
                 SubtitleText = finalText;
 
@@ -255,7 +264,8 @@ public partial class MainViewModel
                     });
                 }
 
-                _partialTranscript = "";
+                if (speaker == Speaker.You) _partialTranscriptYou = "";
+                else _partialTranscriptThem = "";
             });
         }
     }

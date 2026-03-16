@@ -11,6 +11,7 @@
         AllowsTransparency="True"
         Background="Transparent"
         Topmost="True"
+        ShowInTaskbar="{Binding IsStealthModeActive, Converter={StaticResource InvertBoolConverter}}"
         ResizeMode="CanResizeWithGrip"
         Width="700"
         SizeToContent="Height"
@@ -19,13 +20,6 @@
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         PreviewKeyDown="Window_PreviewKeyDown">
 
-        <Window.Resources>
-                <ResourceDictionary>
-                        <ResourceDictionary.MergedDictionaries>
-                                <ResourceDictionary Source="Resources/Styles.xaml"/>
-                        </ResourceDictionary.MergedDictionaries>
-                </ResourceDictionary>
-        </Window.Resources>
 
         <Border CornerRadius="10"
                 Background="{StaticResource BarBg}"
@@ -394,8 +388,43 @@
                                                 </StackPanel>
                                         </TabItem>
 
-                                        <!-- (Análise de IA Tab Removida: Migrada para o Chat Drawer) -->
-                                </TabControl>
+                                         <!-- ── TAB: PRIVACIDADE ── -->
+                                         <TabItem Header="Privacidade"
+                                                  Style="{StaticResource DarkTabItem}">
+                                                 <StackPanel Margin="14,12">
+                                                         <CheckBox IsChecked="{Binding IsStealthModeActive}"
+                                                                   Margin="0,0,0,10">
+                                                                 <TextBlock Text="Modo Furtivo (Stealth)"
+                                                                            Foreground="{StaticResource TextPrimary}"
+                                                                            FontSize="12"
+                                                                            FontWeight="Bold"
+                                                                            FontFamily="Segoe UI"/>
+                                                         </CheckBox>
+                                                         
+                                                         <TextBlock Foreground="{StaticResource TextSecondary}"
+                                                                    FontSize="10"
+                                                                    FontFamily="Segoe UI"
+                                                                    TextWrapping="Wrap"
+                                                                    Margin="20,0,0,0">
+                                                             <Run Text="• Invisível em capturas de tela/compartilhamento"/>
+                                                             <LineBreak/>
+                                                             <Run Text="• Ocultar ícone da barra de tarefas"/>
+                                                             <LineBreak/>
+                                                             <Run Text="• Remover do menu Alt+Tab"/>
+                                                             <LineBreak/>
+                                                             <Run Text="• Cursor invisível sobre a janela"/>
+                                                         </TextBlock>
+
+                                                         <TextBlock Foreground="{StaticResource AccentGold}"
+                                                                    FontSize="9"
+                                                                    FontFamily="Segoe UI"
+                                                                    FontStyle="Italic"
+                                                                    Margin="20,10,0,0"
+                                                                    TextWrapping="Wrap"
+                                                                    Text="Nota: Desabilite para que a janela apareça em reuniões de compartilhamento."/>
+                                                 </StackPanel>
+                                         </TabItem>
+                                 </TabControl>
                         </Border>
 
                         <!-- ═══ ROW 2: HISTORY / CHAT DRAWER ═══ -->

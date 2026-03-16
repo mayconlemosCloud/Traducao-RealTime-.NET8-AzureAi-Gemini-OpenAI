@@ -1,7 +1,9 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using MeetingTranslator.ViewModels;
 
@@ -14,6 +16,19 @@ public partial class MainWindow : Window
     private Storyboard? _slideDownStoryboard;
     private Storyboard? _slideUpStoryboard;
     private Storyboard? _subtitleFadeInStoryboard;
+    
+    [DllImport("user32.dll")]
+    public static extern uint SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const uint WDA_EXCLUDEFROMCAPTURE = 0x00000011;
 
     public MainWindow()
     {
@@ -23,13 +38,11 @@ public partial class MainWindow : Window
 
         // Cache Storyboard — evita FindResource a cada toggle de IsAnalyzing
         _pulseStoryboard = (Storyboard)FindResource("PulseAnimation");
-        Storyboard.SetTarget(_pulseStoryboard, AnalyzingLabel);
 
         // Cache das novas storyboards
         _slideDownStoryboard = (Storyboard)FindResource("SlideDownAnimation");
         _slideUpStoryboard = (Storyboard)FindResource("SlideUpAnimation");
         _subtitleFadeInStoryboard = (Storyboard)FindResource("SubtitleFadeIn");
-        Storyboard.SetTarget(_subtitleFadeInStoryboard, SubtitleBlock);
 
         // Auto-scroll history when new items are added
         _vm.History.CollectionChanged += (_, e) =>
@@ -69,35 +82,52 @@ public partial class MainWindow : Window
         {
             if (_vm.IsAnalyzing)
             {
-                _pulseStoryboard?.Begin();
+                _pulseStoryboard?.Begin(AnalyzingLabel);
             }
             else
             {
-                _pulseStoryboard?.Stop();
+                _pulseStoryboard?.Stop(AnalyzingLabel);
             }
         }
         else if (e.PropertyName == nameof(MainViewModel.IsSettingsVisible))
         {
             var sb = _vm.IsSettingsVisible ? _slideDownStoryboard : _slideUpStoryboard;
-            if (sb != null)
-            {
-                Storyboard.SetTarget(sb, SettingsPanel);
-                sb.Begin();
-            }
+            sb?.Begin(SettingsPanel);
         }
         else if (e.PropertyName == nameof(MainViewModel.IsHistoryVisible))
         {
             var sb = _vm.IsHistoryVisible ? _slideDownStoryboard : _slideUpStoryboard;
-            if (sb != null)
-            {
-                Storyboard.SetTarget(sb, HistoryPanel);
-                sb.Begin();
-            }
+            sb?.Begin(HistoryPanel);
         }
         else if (e.PropertyName == nameof(MainViewModel.SubtitleText))
         {
-            _subtitleFadeInStoryboard?.Begin();
+            _subtitleFadeInStoryboard?.Begin(SubtitleBlock);
         }
+        else if (e.PropertyName == nameof(MainViewModel.IsStealthModeActive))
+        {
+            ApplyStealthMode(_vm.IsStealthModeActive);
+        }
+    }
+
+    private void ApplyStealthMode(bool active)
+    {
+        var helper = new WindowInteropHelper(this);
+        var hwnd = helper.Handle;
+        if (hwnd == IntPtr.Zero) return;
+
+        // 1. Invisible on Screen Share
+        uint affinity = active ? WDA_EXCLUDEFROMCAPTURE : 0x0; // WDA_NONE = 0
+        SetWindowDisplayAffinity(hwnd, affinity);
+
+        // 2. Invisible to Tab Switching (Alt+Tab)
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        if (active)
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TOOLWINDOW);
+        else
+            SetWindowLong(hwnd, GWL_EXSTYLE, exStyle & ~WS_EX_TOOLWINDOW);
+
+        // 3. Cursor visibility
+        this.Cursor = active ? Cursors.None : Cursors.Arrow;
     }
 
     private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -165,6 +195,12 @@ public partial class MainWindow : Window
     {
         _vm.Dispose();
         Close();
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        ApplyStealthMode(_vm.IsStealthModeActive);
     }
 
     protected override void OnClosed(EventArgs e)

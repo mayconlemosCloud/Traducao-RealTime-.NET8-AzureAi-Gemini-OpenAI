@@ -49,16 +49,18 @@ public sealed class AzureTranscriptionService : IDisposable
             var config = SpeechTranslationConfig.FromSubscription(_speechKey, _speechRegion);
             config.SpeechRecognitionLanguage = "pt-BR";
             config.AddTargetLanguage("en");
-            config.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "250");
-            config.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "300");
-            config.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "3");
+            config.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "500");
+            config.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "1000");
+            config.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "1");
 
             _micAudioConfig = ResolveMicrophoneAudioConfig(micDeviceIndex);
             _micRecognizer = new TranslationRecognizer(config, _micAudioConfig);
 
             _micRecognizer.Recognizing += (s, e) => OnRecognizing(e, Speaker.You, "en");
             _micRecognizer.Recognized += (s, e) => OnRecognized(e, Speaker.You, "en", "pt-BR");
-            _micRecognizer.Canceled += OnCanceled;
+            _micRecognizer.Canceled += (s, e) => OnCanceled(e, "Mic");
+            _micRecognizer.SessionStarted += (s, e) => System.Diagnostics.Debug.WriteLine("Azure Mic: Sessão iniciada");
+            _micRecognizer.SessionStopped += (s, e) => System.Diagnostics.Debug.WriteLine("Azure Mic: Sessão interrompida");
 
             await _micRecognizer.StartContinuousRecognitionAsync().ConfigureAwait(false);
         }
@@ -67,18 +69,20 @@ public sealed class AzureTranscriptionService : IDisposable
         {
             var config = SpeechTranslationConfig.FromSubscription(_speechKey, _speechRegion);
             config.SpeechRecognitionLanguage = "en-US";
-            config.AddTargetLanguage("pt");
-            config.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "250");
-            config.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "300");
-            config.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "3");
+            config.AddTargetLanguage("pt-BR");
+            config.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "500");
+            config.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "1000");
+            config.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "1");
 
             // Loopback usa mic padrão — o áudio do sistema é roteado via virtual cable
             _loopbackAudioConfig = AudioConfig.FromDefaultMicrophoneInput();
             _loopbackRecognizer = new TranslationRecognizer(config, _loopbackAudioConfig);
 
-            _loopbackRecognizer.Recognizing += (s, e) => OnRecognizing(e, Speaker.Them, "pt");
-            _loopbackRecognizer.Recognized += (s, e) => OnRecognized(e, Speaker.Them, "pt", "en-US");
-            _loopbackRecognizer.Canceled += OnCanceled;
+            _loopbackRecognizer.Recognizing += (s, e) => OnRecognizing(e, Speaker.Them, "pt-BR");
+            _loopbackRecognizer.Recognized += (s, e) => OnRecognized(e, Speaker.Them, "pt-BR", "en-US");
+            _loopbackRecognizer.Canceled += (s, e) => OnCanceled(e, "Loopback");
+            _loopbackRecognizer.SessionStarted += (s, e) => System.Diagnostics.Debug.WriteLine("Azure Loopback: Sessão iniciada");
+            _loopbackRecognizer.SessionStopped += (s, e) => System.Diagnostics.Debug.WriteLine("Azure Loopback: Sessão interrompida");
 
             await _loopbackRecognizer.StartContinuousRecognitionAsync().ConfigureAwait(false);
         }
@@ -111,19 +115,26 @@ public sealed class AzureTranscriptionService : IDisposable
 
     private void OnRecognizing(TranslationRecognitionEventArgs e, Speaker speaker, string targetLang)
     {
-        if (e.Result.Reason != ResultReason.TranslatingSpeech)
-            return;
-
-        if (e.Result.Translations.TryGetValue(targetLang, out var partial) && !string.IsNullOrWhiteSpace(partial))
+        try
         {
-            AnalyzingChanged?.Invoke(this, false);
-            TranscriptReceived?.Invoke(this, new TranscriptEventArgs
+            bool hasTranslation = e.Result.Translations.TryGetValue(targetLang, out var partial) && !string.IsNullOrWhiteSpace(partial);
+            bool hasOriginal = !string.IsNullOrWhiteSpace(e.Result.Text);
+
+            if (hasTranslation || hasOriginal)
             {
-                Speaker = speaker,
-                OriginalText = e.Result.Text,
-                TranslatedText = partial,
-                IsPartial = true
-            });
+                AnalyzingChanged?.Invoke(this, false);
+                TranscriptReceived?.Invoke(this, new TranscriptEventArgs
+                {
+                    Speaker = speaker,
+                    OriginalText = e.Result.Text,
+                    TranslatedText = partial ?? "",
+                    IsPartial = true
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Erro em OnRecognizing: {ex.Message}");
         }
     }
 
@@ -132,7 +143,7 @@ public sealed class AzureTranscriptionService : IDisposable
         switch (e.Result.Reason)
         {
             case ResultReason.TranslatedSpeech:
-                if (e.Result.Translations.TryGetValue(targetLang, out var translated) && !string.IsNullOrWhiteSpace(translated))
+                if (e.Result.Reason == ResultReason.TranslatedSpeech && e.Result.Translations.TryGetValue(targetLang, out var translated) && !string.IsNullOrWhiteSpace(translated))
                 {
                     TranscriptReceived?.Invoke(this, new TranscriptEventArgs
                     {
@@ -142,6 +153,20 @@ public sealed class AzureTranscriptionService : IDisposable
                         IsPartial = false
                     });
                 }
+                else if (e.Result.Reason == ResultReason.RecognizedSpeech || e.Result.Reason == ResultReason.TranslatedSpeech)
+                {
+                    // Fallback se a tradução falhar mas o texto original existe (ou vice-versa)
+                    if (!string.IsNullOrWhiteSpace(e.Result.Text))
+                    {
+                        TranscriptReceived?.Invoke(this, new TranscriptEventArgs
+                        {
+                            Speaker = speaker,
+                            OriginalText = e.Result.Text,
+                            TranslatedText = e.Result.Text, // Fallback
+                            IsPartial = false
+                        });
+                    }
+                }
                 break;
 
             case ResultReason.NoMatch:
@@ -150,13 +175,16 @@ public sealed class AzureTranscriptionService : IDisposable
         }
     }
 
-    private void OnCanceled(object? sender, TranslationRecognitionCanceledEventArgs e)
+    private void OnCanceled(TranslationRecognitionCanceledEventArgs e, string source)
     {
+        System.Diagnostics.Debug.WriteLine($"Azure {source} Cancelado: {e.Reason}.");
+        
         if (e.Reason == CancellationReason.Error)
         {
+            System.Diagnostics.Debug.WriteLine($"Azure {source} Erro: {e.ErrorCode} - {e.ErrorDetails}");
             ErrorOccurred?.Invoke(this, new StatusEventArgs
             {
-                Message = $"Azure erro: {e.ErrorCode} — {e.ErrorDetails}"
+                Message = $"Azure {source} erro: {e.ErrorCode}"
             });
         }
     }
