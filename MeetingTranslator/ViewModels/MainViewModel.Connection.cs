@@ -238,18 +238,18 @@ public partial class MainViewModel
         else
         {
             var translatedText = e.TranslatedText;
-            var originalText   = e.OriginalText;
-            var speaker        = e.Speaker;
-            var speakerId      = e.SpeakerId;
+            var originalText = e.OriginalText;
+            var speaker = e.Speaker;
+            var speakerId = e.SpeakerId;
 
             _dispatcher.BeginInvoke(() =>
             {
-                IsAnalyzing       = false;
+                IsAnalyzing = false;
                 IsAssistantTyping = false;
                 _pendingPartialText = null;
 
                 var lastPartial = (speaker == Speaker.You) ? _partialTranscriptYou : _partialTranscriptThem;
-                var finalText   = string.IsNullOrEmpty(translatedText) ? lastPartial : translatedText;
+                var finalText = string.IsNullOrEmpty(translatedText) ? lastPartial : translatedText;
 
                 SubtitleText = finalText;
 
@@ -257,9 +257,9 @@ public partial class MainViewModel
                 {
                     History.Add(new ConversationEntry
                     {
-                        Speaker        = speaker,
-                        SpeakerId      = speakerId,
-                        OriginalText   = originalText ?? "",
+                        Speaker = speaker,
+                        SpeakerId = speakerId,
+                        OriginalText = originalText ?? "",
                         TranslatedText = finalText
                     });
                 }

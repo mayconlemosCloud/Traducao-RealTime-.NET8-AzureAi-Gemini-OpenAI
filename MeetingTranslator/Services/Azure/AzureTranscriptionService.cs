@@ -212,16 +212,16 @@ public sealed class AzureTranscriptionService : IDisposable
 
     private void WireEvents(ConversationTranscriber t, Speaker speaker, string fromLang, string toLang, string source, bool isMic)
     {
-        t.Transcribing     += (s, e) => OnTranscribing(e, speaker);
-        t.Transcribed      += (s, e) => _ = OnTranscribedAsync(e, speaker, fromLang, toLang);
-        t.Canceled         += (s, e) => _ = OnCanceledAsync(e, source, isMic);
-        t.SessionStarted   += (s, e) =>
+        t.Transcribing += (s, e) => OnTranscribing(e, speaker);
+        t.Transcribed += (s, e) => _ = OnTranscribedAsync(e, speaker, fromLang, toLang);
+        t.Canceled += (s, e) => _ = OnCanceledAsync(e, source, isMic);
+        t.SessionStarted += (s, e) =>
         {
             Log($"{source}: sessão iniciada");
             if (isMic) _micReconnectAttempts = 0;
             else _loopbackReconnectAttempts = 0;
         };
-        t.SessionStopped   += (s, e) => _ = OnSessionStoppedAsync(source, isMic);
+        t.SessionStopped += (s, e) => _ = OnSessionStoppedAsync(source, isMic);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -238,11 +238,11 @@ public sealed class AzureTranscriptionService : IDisposable
             AnalyzingChanged?.Invoke(this, false);
             TranscriptReceived?.Invoke(this, new TranscriptEventArgs
             {
-                Speaker        = speaker,
-                OriginalText   = text,
+                Speaker = speaker,
+                OriginalText = text,
                 TranslatedText = text,        // parcial: exibe original, sem HTTP
-                IsPartial      = true,
-                SpeakerId      = NormalizeSpeakerId(e.Result.SpeakerId)
+                IsPartial = true,
+                SpeakerId = NormalizeSpeakerId(e.Result.SpeakerId)
             });
         }
         catch (Exception ex) { Log($"Erro OnTranscribing: {ex.Message}"); }
@@ -268,11 +268,11 @@ public sealed class AzureTranscriptionService : IDisposable
 
             TranscriptReceived?.Invoke(this, new TranscriptEventArgs
             {
-                Speaker        = speaker,
-                OriginalText   = original,
+                Speaker = speaker,
+                OriginalText = original,
                 TranslatedText = translated,
-                IsPartial      = false,
-                SpeakerId      = NormalizeSpeakerId(e.Result.SpeakerId)
+                IsPartial = false,
+                SpeakerId = NormalizeSpeakerId(e.Result.SpeakerId)
             });
         }
         catch (OperationCanceledException) { }
