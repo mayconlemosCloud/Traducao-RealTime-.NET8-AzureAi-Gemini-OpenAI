@@ -1,0 +1,10 @@
+C:\Users\lemos\Desktop\Projeto\dotnet\speech\MeetingGoogle\ViewModels\MainViewModel.cs(52,59): error CS1061: ‘byte[]’ não contém uma definição para "Buffer" e não foi possível encontrar nenhum método de extensão "Buffer" que aceite um primeiro argumento do tipo ‘byte[]’ (você está se esquecendo de usar uma diretiva ou uma referência de assembly?) [C:\Users\lemos\Desktop\Projeto\dotnet\speech\MeetingGoogle\MeetingGoogle_q2pv144u_wpftmp.csproj]
+C:\Users\lemos\Desktop\Projeto\dotnet\speech\MeetingGoogle\ViewModels\MainViewModel.cs(52,69): error CS1061: ‘byte[]’ não contém uma definição para "BytesRecorded" e não foi possível encontrar nenhum método de extensão "BytesRecorded" que aceite um primeiro argumento do tipo ‘byte[]’ (você está se esquecendo de usar uma diretiva ou uma referência de assembly?) [C:\Users\lemos\Desktop\Projeto\dotnet\speech\MeetingGoogle\MeetingGoogle_q2pv144u_wpftmp.csproj]
+
+FALHA da compilação.
+    1 Aviso(s)
+    2 Erro(s)
+
+Tempo Decorrido 00:00:01.70
+
+As atualizações de carga de trabalho estão disponíveis. Execute `dotnet workload list` para obter mais informações.
