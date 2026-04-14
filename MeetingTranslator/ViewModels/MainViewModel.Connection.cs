@@ -209,10 +209,11 @@ public partial class MainViewModel
 
         if (e.IsPartial)
         {
-            // No modo Transcrição, mostramos o OriginalText para feedback instantâneo
-            string textToShow = (SelectedMode == TranslationMode.Transcription && !string.IsNullOrWhiteSpace(e.OriginalText))
-                ? e.OriginalText
-                : e.TranslatedText;
+            // Agora que o Azure suporta traduções em tempo real nativas,
+            // não precisamos mais forçar o OriginalText para ter feedback rápido.
+            string textToShow = !string.IsNullOrWhiteSpace(e.TranslatedText) 
+                ? e.TranslatedText 
+                : e.OriginalText ?? "";
 
             _pendingPartialText = textToShow;
 
@@ -230,7 +231,8 @@ public partial class MainViewModel
                     {
                         IsAnalyzing = false;
                         IsAssistantTyping = true;
-                        SubtitleText = text;
+                        SubtitleText = "";
+                        PartialSubtitleText = text;
                     }
                 });
             }
@@ -251,6 +253,7 @@ public partial class MainViewModel
                 var lastPartial = (speaker == Speaker.You) ? _partialTranscriptYou : _partialTranscriptThem;
                 var finalText = string.IsNullOrEmpty(translatedText) ? lastPartial : translatedText;
 
+                PartialSubtitleText = "";
                 SubtitleText = finalText;
 
                 if (!string.IsNullOrWhiteSpace(finalText))

@@ -3,6 +3,7 @@ using MeetingTranslator.Services.Common;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
 using Microsoft.CognitiveServices.Speech.Transcription;
+using Microsoft.CognitiveServices.Speech.Translation;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using System.Linq;
@@ -10,9 +11,8 @@ using System.Linq;
 namespace MeetingTranslator.Services.Azure;
 
 /// <summary>
-/// Transcrição em tempo real com diarização via ConversationTranscriber (Azure Speech SDK).
-/// Usa Azure Translator REST API para tradução pt-BR.
-/// Suporta microfone (AudioConfig direto) e loopback (WasapiLoopbackCapture → PushAudioInputStream).
+/// Transcrição em tempo real (Azure Speech SDK).
+/// Usa ConversationTranscriber para mic e TranslationRecognizer para loopback (Live Captions reais).
 /// Auto-reconecta em caso de erros de sessão.
 /// </summary>
 public sealed class AzureTranscriptionService : IDisposable
@@ -21,12 +21,12 @@ public sealed class AzureTranscriptionService : IDisposable
     private readonly string _speechRegion;
     private readonly AzureTranslatorClient _translator;
 
-    // ── Mic ──
+    // ── Mic (Usa ConversationTranscriber para manter diarização se for multiuso presencial) ──
     private ConversationTranscriber? _micTranscriber;
     private AudioConfig? _micAudioConfig;
 
-    // ── Loopback ──
-    private ConversationTranscriber? _loopbackTranscriber;
+    // ── Loopback (Live Captions Streaming) ──
+    private TranslationRecognizer? _loopbackRecognizer;
     private AudioConfig? _loopbackAudioConfig;
     private WasapiLoopbackCapture? _loopbackCapture;
     private PushAudioInputStream? _loopbackPushStream;
@@ -84,7 +84,7 @@ public sealed class AzureTranscriptionService : IDisposable
                 await StartMicTranscriberAsync(micDeviceIndex).ConfigureAwait(false);
 
             if (useLoopback)
-                await StartLoopbackTranscriberAsync(loopbackDeviceIndex).ConfigureAwait(false);
+                await StartLoopbackRecognizerAsync(loopbackDeviceIndex).ConfigureAwait(false);
 
             _isConnected = true;
             StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Pronto — ouvindo..." });
@@ -101,7 +101,7 @@ public sealed class AzureTranscriptionService : IDisposable
         _cts.Cancel();
 
         try { if (_micTranscriber != null) await _micTranscriber.StopTranscribingAsync().ConfigureAwait(false); } catch { }
-        try { if (_loopbackTranscriber != null) await _loopbackTranscriber.StopTranscribingAsync().ConfigureAwait(false); } catch { }
+        try { if (_loopbackRecognizer != null) await _loopbackRecognizer.StopContinuousRecognitionAsync().ConfigureAwait(false); } catch { }
         try { _loopbackCapture?.StopRecording(); } catch { }
 
         DisposeTranscribers();
@@ -119,17 +119,17 @@ public sealed class AzureTranscriptionService : IDisposable
         _micAudioConfig = ResolveMicrophoneAudioConfig(micDeviceIndex);
         _micTranscriber = new ConversationTranscriber(config, _micAudioConfig);
 
-        WireEvents(_micTranscriber, Speaker.You, "pt-BR", "en", "Mic", isMic: true);
+        WireEventsMic(_micTranscriber, Speaker.You, "pt-BR", "en", "Mic");
 
         await _micTranscriber.StartTranscribingAsync().ConfigureAwait(false);
         Log("Mic: StartTranscribingAsync OK");
     }
 
     // ─────────────────────────────────────────────────────────────────
-    //  Start: Loopback (áudio do sistema via WasapiLoopbackCapture)
+    //  Start: Loopback (Live Captions via TranslationRecognizer)
     // ─────────────────────────────────────────────────────────────────
 
-    private async Task StartLoopbackTranscriberAsync(int loopbackDeviceIndex)
+    private async Task StartLoopbackRecognizerAsync(int loopbackDeviceIndex)
     {
         // 1. Encontrar dispositivo de renderização selecionado
         var enumerator = new MMDeviceEnumerator();
@@ -150,15 +150,14 @@ public sealed class AzureTranscriptionService : IDisposable
 
         Log($"Loopback: dispositivo='{chosen?.FriendlyName ?? "padrão do sistema"}'");
 
-        // 2. WasapiLoopbackCapture captura o áudio do dispositivo de renderização
+        // 2. WasapiLoopbackCapture captura áudio de renderização
         _loopbackCapture = chosen != null
             ? new WasapiLoopbackCapture(chosen)
             : new WasapiLoopbackCapture();
 
-        // 3. PushAudioInputStream → Azure SDK espera 16kHz mono PCM16
+        // 3. Formato para Azure = 16kHz mono PCM16
         var pushFormat = AudioStreamFormat.GetWaveFormatPCM(16000, 16, 1);
         _loopbackPushStream = AudioInputStream.CreatePushStream(pushFormat);
-
         var targetWaveFormat = new WaveFormat(16000, 16, 1);
 
         _loopbackCapture.DataAvailable += (s, e) =>
@@ -178,25 +177,25 @@ public sealed class AzureTranscriptionService : IDisposable
 
         _loopbackCapture.RecordingStopped += (s, e) =>
         {
-            Log($"Loopback: WasapiLoopbackCapture parou{(e.Exception != null ? $" com erro: {e.Exception.Message}" : "")}");
+            Log($"Loopback parou{(e.Exception != null ? $" erro: {e.Exception.Message}" : "")}");
         };
 
         _loopbackCapture.StartRecording();
-        Log("Loopback: WasapiLoopbackCapture.StartRecording() OK");
+        Log("Loopback: StartRecording() OK");
 
-        // 4. Criar ConversationTranscriber com PushAudioInputStream
-        var config = BuildSpeechConfig("en-US");
+        // 4. Utilizar TranslationRecognizer para Live Captions Reais
+        var config = BuildSpeechTranslationConfig("en-US", "pt-BR");
         _loopbackAudioConfig = AudioConfig.FromStreamInput(_loopbackPushStream);
-        _loopbackTranscriber = new ConversationTranscriber(config, _loopbackAudioConfig);
+        _loopbackRecognizer = new TranslationRecognizer(config, _loopbackAudioConfig);
 
-        WireEvents(_loopbackTranscriber, Speaker.Them, "en-US", "pt-BR", "Loopback", isMic: false);
+        WireTranslationEvents(_loopbackRecognizer, Speaker.Them, "en-US", "pt-BR", "Loopback");
 
-        await _loopbackTranscriber.StartTranscribingAsync().ConfigureAwait(false);
-        Log("Loopback: StartTranscribingAsync OK");
+        await _loopbackRecognizer.StartContinuousRecognitionAsync().ConfigureAwait(false);
+        Log("Loopback: TranslationRecognizer OK");
     }
 
     // ─────────────────────────────────────────────────────────────────
-    //  Config e wiring de eventos
+    //  Configs
     // ─────────────────────────────────────────────────────────────────
 
     private SpeechConfig BuildSpeechConfig(string recognitionLanguage)
@@ -210,23 +209,33 @@ public sealed class AzureTranscriptionService : IDisposable
         return config;
     }
 
-    private void WireEvents(ConversationTranscriber t, Speaker speaker, string fromLang, string toLang, string source, bool isMic)
+    private SpeechTranslationConfig BuildSpeechTranslationConfig(string fromLang, string toLang)
     {
-        t.Transcribing += (s, e) => OnTranscribing(e, speaker);
-        t.Transcribed += (s, e) => _ = OnTranscribedAsync(e, speaker, fromLang, toLang);
-        t.Canceled += (s, e) => _ = OnCanceledAsync(e, source, isMic);
-        t.SessionStarted += (s, e) =>
-        {
-            Log($"{source}: sessão iniciada");
-            if (isMic) _micReconnectAttempts = 0;
-            else _loopbackReconnectAttempts = 0;
-        };
-        t.SessionStopped += (s, e) => _ = OnSessionStoppedAsync(source, isMic);
+        var config = SpeechTranslationConfig.FromSubscription(_speechKey, _speechRegion);
+        config.SpeechRecognitionLanguage = fromLang;
+        config.AddTargetLanguage(toLang);
+        config.SetProperty(PropertyId.Speech_SegmentationSilenceTimeoutMs, "500");
+        config.SetProperty(PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "2000");
+        config.SetProperty(PropertyId.SpeechServiceResponse_StablePartialResultThreshold, "1");
+        return config;
     }
 
     // ─────────────────────────────────────────────────────────────────
-    //  Handlers de transcrição
+    //  Eventos Mic (O antigo ConversationTranscriber com REST)
     // ─────────────────────────────────────────────────────────────────
+
+    private void WireEventsMic(ConversationTranscriber t, Speaker speaker, string fromLang, string toLang, string source)
+    {
+        t.Transcribing += (s, e) => OnTranscribing(e, speaker);
+        t.Transcribed += (s, e) => _ = OnTranscribedAsync(e, speaker, fromLang, toLang);
+        t.Canceled += (s, e) => _ = OnCanceledAsync(e, source, isMic: true);
+        t.SessionStarted += (s, e) =>
+        {
+            Log($"{source}: sessão iniciada");
+            _micReconnectAttempts = 0;
+        };
+        t.SessionStopped += (s, e) => _ = OnSessionStoppedAsync(source, isMic: true);
+    }
 
     private void OnTranscribing(ConversationTranscriptionEventArgs e, Speaker speaker)
     {
@@ -240,7 +249,7 @@ public sealed class AzureTranscriptionService : IDisposable
             {
                 Speaker = speaker,
                 OriginalText = text,
-                TranslatedText = text,        // parcial: exibe original, sem HTTP
+                TranslatedText = text,        // parcial: exibe original do mic
                 IsPartial = true,
                 SpeakerId = NormalizeSpeakerId(e.Result.SpeakerId)
             });
@@ -252,27 +261,13 @@ public sealed class AzureTranscriptionService : IDisposable
     {
         try
         {
-            if (e.Result.Reason == ResultReason.NoMatch)
-            {
-                AnalyzingChanged?.Invoke(this, false);
+            if (e.Result.Reason == ResultReason.NoMatch || e.Result.Reason != ResultReason.RecognizedSpeech) 
                 return;
-            }
-            if (e.Result.Reason != ResultReason.RecognizedSpeech) return;
 
             var original = e.Result.Text;
             if (string.IsNullOrWhiteSpace(original)) return;
 
-            // Tradução via REST
-            var translated = await _translator.TranslateAsync(original, fromLang, toLang, _cts.Token)
-                                              .ConfigureAwait(false);
-
-            // Se a tradução falhar (retorna igual ao original), notifica erro visível
-            if (translated == original && !string.IsNullOrWhiteSpace(original) && !fromLang.Equals(toLang, StringComparison.OrdinalIgnoreCase))
-            {
-                var msg = $"Falha ao traduzir: '{original}' ({fromLang}→{toLang})";
-                Log(msg);
-                ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = msg });
-            }
+            var translated = await _translator.TranslateAsync(original, fromLang, toLang, _cts.Token).ConfigureAwait(false);
 
             TranscriptReceived?.Invoke(this, new TranscriptEventArgs
             {
@@ -283,31 +278,114 @@ public sealed class AzureTranscriptionService : IDisposable
                 SpeakerId = NormalizeSpeakerId(e.Result.SpeakerId)
             });
         }
-        catch (OperationCanceledException) { }
         catch (Exception ex) { Log($"Erro OnTranscribedAsync: {ex.Message}"); }
     }
-
-    // ─────────────────────────────────────────────────────────────────
-    //  Resiliência: cancel / session stopped → reconnect
-    // ─────────────────────────────────────────────────────────────────
 
     private async Task OnCanceledAsync(ConversationTranscriptionCanceledEventArgs e, string source, bool isMic)
     {
         Log($"{source} Cancelado: {e.Reason}");
-
         if (e.Reason == CancellationReason.Error)
         {
             Log($"{source} Erro: {e.ErrorCode} — {e.ErrorDetails}");
             ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = $"{source}: {e.ErrorCode}" });
             await TryReconnectAsync(source, isMic).ConfigureAwait(false);
         }
-        // EndOfStream → áudio cessou, não reconectar (pode ser silêncio normal em loopback)
     }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Eventos Loopback (Novo TranslationRecognizer Nativo)
+    // ─────────────────────────────────────────────────────────────────
+
+    private void WireTranslationEvents(TranslationRecognizer t, Speaker speaker, string fromLang, string toLang, string source)
+    {
+        t.Recognizing += (s, e) => OnTranslationRecognizing(e, speaker, toLang);
+        t.Recognized += (s, e) => OnTranslationRecognized(e, speaker, toLang);
+        t.Canceled += (s, e) => _ = OnTranslationCanceledAsync(e, source, isMic: false);
+        t.SessionStarted += (s, e) =>
+        {
+            Log($"{source}: sessão iniciada (Tradutor Nativo)");
+            _loopbackReconnectAttempts = 0;
+        };
+        t.SessionStopped += (s, e) => _ = OnSessionStoppedAsync(source, isMic: false);
+    }
+
+    private void OnTranslationRecognizing(TranslationRecognitionEventArgs e, Speaker speaker, string toLang)
+    {
+        try
+        {
+            var translations = e.Result.Translations;
+            if (translations == null || translations.Count == 0) return;
+
+            string translated = "";
+            if (translations.TryGetValue(toLang, out var t)) translated = t;
+            else if (translations.TryGetValue("pt", out var t2)) translated = t2;
+            else translated = translations.First().Value; // Fallback extremo para a única tradução pedida
+
+            if (!string.IsNullOrWhiteSpace(translated))
+            {
+                AnalyzingChanged?.Invoke(this, false);
+                TranscriptReceived?.Invoke(this, new TranscriptEventArgs
+                {
+                    Speaker = speaker,
+                    OriginalText = e.Result.Text,
+                    TranslatedText = translated,
+                    IsPartial = true,
+                    SpeakerId = null
+                });
+            }
+        }
+        catch (Exception ex) { Log($"Erro OnTranslationRecognizing: {ex.Message}"); }
+    }
+
+    private void OnTranslationRecognized(TranslationRecognitionEventArgs e, Speaker speaker, string toLang)
+    {
+        try
+        {
+            if (e.Result.Reason == ResultReason.TranslatedSpeech)
+            {
+                var translations = e.Result.Translations;
+                if (translations == null || translations.Count == 0) return;
+
+                string translated = "";
+                if (translations.TryGetValue(toLang, out var t)) translated = t;
+                else if (translations.TryGetValue("pt", out var t2)) translated = t2;
+                else translated = translations.First().Value;
+
+                var original = e.Result.Text;
+                if (string.IsNullOrWhiteSpace(original)) return;
+
+                TranscriptReceived?.Invoke(this, new TranscriptEventArgs
+                {
+                    Speaker = speaker,
+                    OriginalText = original,
+                    TranslatedText = translated,
+                    IsPartial = false,
+                    SpeakerId = null
+                });
+            }
+        }
+        catch (Exception ex) { Log($"Erro OnTranslationRecognized: {ex.Message}"); }
+    }
+
+    private async Task OnTranslationCanceledAsync(TranslationRecognitionCanceledEventArgs e, string source, bool isMic)
+    {
+        Log($"{source} Cancelado: {e.Reason}");
+        if (e.Reason == CancellationReason.Error)
+        {
+            Log($"{source} Erro: {e.ErrorCode} — {e.ErrorDetails}");
+            ErrorOccurred?.Invoke(this, new StatusEventArgs { Message = $"{source}: {e.ErrorCode}" });
+            await TryReconnectAsync(source, isMic).ConfigureAwait(false);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    //  Resiliência 
+    // ─────────────────────────────────────────────────────────────────
 
     private async Task OnSessionStoppedAsync(string source, bool isMic)
     {
         if (_cts.IsCancellationRequested || _isDisposed) return;
-        Log($"{source}: sessão parou inesperadamente");
+        Log($"{source}: sessão parou");
         await TryReconnectAsync(source, isMic).ConfigureAwait(false);
     }
 
@@ -319,21 +397,16 @@ public sealed class AzureTranscriptionService : IDisposable
 
         if (attempts >= MaxReconnectAttempts)
         {
-            Log($"[Reconnect] {source}: máximo de {MaxReconnectAttempts} tentativas atingido");
-            StatusChanged?.Invoke(this, new StatusEventArgs { Message = $"⚠ {source}: sem conexão após {MaxReconnectAttempts} tentativas" });
+            StatusChanged?.Invoke(this, new StatusEventArgs { Message = $"⚠ {source}: falha na reconexão" });
             return;
         }
 
         attempts++;
-        int delaySec = (int)Math.Pow(2, attempts); // 2, 4, 8, 16, 32
+        int delaySec = (int)Math.Pow(2, attempts);
         StatusChanged?.Invoke(this, new StatusEventArgs { Message = $"Reconectando {source}... ({attempts}/{MaxReconnectAttempts})" });
-        Log($"[Reconnect] {source}: aguardando {delaySec}s (tentativa {attempts})");
 
-        try
-        {
-            await Task.Delay(TimeSpan.FromSeconds(delaySec), _cts.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) { return; }
+        try { await Task.Delay(TimeSpan.FromSeconds(delaySec), _cts.Token).ConfigureAwait(false); }
+        catch { return; }
 
         if (_cts.IsCancellationRequested || _isDisposed) return;
 
@@ -346,74 +419,47 @@ public sealed class AzureTranscriptionService : IDisposable
             }
             else
             {
-                DisposeLoopbackTranscriber();
-                await StartLoopbackTranscriberAsync(_lastLoopbackIndex).ConfigureAwait(false);
+                DisposeLoopbackRecognizer();
+                await StartLoopbackRecognizerAsync(_lastLoopbackIndex).ConfigureAwait(false);
             }
 
-            StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Pronto — ouvindo..." });
-            Log($"[Reconnect] {source}: OK");
+            StatusChanged?.Invoke(this, new StatusEventArgs { Message = "Pronto — reconectado" });
         }
         catch (Exception ex)
         {
-            Log($"[Reconnect] {source}: falha — {ex.Message}");
+            Log($"[Reconnect] {source} falha: {ex.Message}");
             await TryReconnectAsync(source, isMic).ConfigureAwait(false);
         }
     }
 
     // ─────────────────────────────────────────────────────────────────
-    //  Resolução de microfone
+    //  Audio Config & Dispose
     // ─────────────────────────────────────────────────────────────────
 
     private AudioConfig ResolveMicrophoneAudioConfig(int micDeviceIndex)
     {
         var uiDevices = AudioHelper.GetInputDevices();
         var selected = uiDevices.FirstOrDefault(d => d.DeviceIndex == micDeviceIndex);
-
         var enumerator = new MMDeviceEnumerator();
         var captureDevices = enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).ToList();
 
         MMDevice? chosen = null;
         if (selected != null && !string.IsNullOrWhiteSpace(selected.Name))
-        {
-            chosen = captureDevices.FirstOrDefault(d => d.FriendlyName.Equals(selected.Name, StringComparison.OrdinalIgnoreCase))
-                  ?? captureDevices.FirstOrDefault(d => d.FriendlyName.Contains(selected.Name, StringComparison.OrdinalIgnoreCase));
-        }
+            chosen = captureDevices.FirstOrDefault(d => d.FriendlyName.Contains(selected.Name, StringComparison.OrdinalIgnoreCase));
 
         if (chosen == null && micDeviceIndex >= 0 && micDeviceIndex < captureDevices.Count)
             chosen = captureDevices[micDeviceIndex];
 
-        if (chosen == null)
-        {
-            Log("Mic: dispositivo padrão (fallback)");
-            return AudioConfig.FromDefaultMicrophoneInput();
-        }
+        if (chosen == null) return AudioConfig.FromDefaultMicrophoneInput();
 
-        Log($"Mic: '{chosen.FriendlyName}' ID={chosen.ID}");
         try { return AudioConfig.FromMicrophoneInput(chosen.ID); }
-        catch
-        {
-            try { return AudioConfig.FromMicrophoneInput(chosen.FriendlyName); }
-            catch { return AudioConfig.FromDefaultMicrophoneInput(); }
-        }
+        catch { return AudioConfig.FromDefaultMicrophoneInput(); }
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    //  Utilitários
-    // ─────────────────────────────────────────────────────────────────
+    private static string? NormalizeSpeakerId(string? id) =>
+        (string.IsNullOrWhiteSpace(id) || id.Equals("Unknown", StringComparison.OrdinalIgnoreCase)) ? null : id;
 
-    private static string? NormalizeSpeakerId(string? id)
-    {
-        if (string.IsNullOrWhiteSpace(id) || id.Equals("Unknown", StringComparison.OrdinalIgnoreCase))
-            return null;
-        return id;
-    }
-
-    private static void Log(string msg)
-        => System.Diagnostics.Debug.WriteLine($"[AzureTranscription] {msg}");
-
-    // ─────────────────────────────────────────────────────────────────
-    //  Dispose
-    // ─────────────────────────────────────────────────────────────────
+    private static void Log(string msg) => System.Diagnostics.Debug.WriteLine($"[AzureLiveCaptions] {msg}");
 
     private void DisposeMicTranscriber()
     {
@@ -423,18 +469,15 @@ public sealed class AzureTranscriptionService : IDisposable
         _micAudioConfig = null;
     }
 
-    private void DisposeLoopbackTranscriber()
+    private void DisposeLoopbackRecognizer()
     {
         try { _loopbackCapture?.StopRecording(); } catch { }
         _loopbackCapture?.Dispose();
         _loopbackCapture = null;
-
-        _loopbackTranscriber?.Dispose();
-        _loopbackTranscriber = null;
-
+        _loopbackRecognizer?.Dispose();
+        _loopbackRecognizer = null;
         _loopbackPushStream?.Dispose();
         _loopbackPushStream = null;
-
         _loopbackAudioConfig?.Dispose();
         _loopbackAudioConfig = null;
     }
@@ -442,7 +485,7 @@ public sealed class AzureTranscriptionService : IDisposable
     private void DisposeTranscribers()
     {
         DisposeMicTranscriber();
-        DisposeLoopbackTranscriber();
+        DisposeLoopbackRecognizer();
     }
 
     public void Dispose()

@@ -22,9 +22,18 @@
 
 
         <Border CornerRadius="10"
-                Background="{StaticResource BarBg}"
                 BorderBrush="#33FFFFFF"
                 BorderThickness="1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="#90000000" />
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{StaticResource BarBg}" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Border.Effect>
                         <DropShadowEffect BlurRadius="20" ShadowDepth="0" Color="Black" Opacity="0.6"/>
                 </Border.Effect>
@@ -121,14 +130,14 @@
                                               VerticalAlignment="Center">
                                     <StackPanel>
                                         <TextBlock x:Name="SubtitleBlock"
-                                                   Text="{Binding SubtitleText}"
-                                                   Foreground="{StaticResource TextPrimary}"
                                                    FontSize="16"
                                                    FontFamily="Segoe UI"
-                                                   FontWeight="SemiBold"
                                                    TextWrapping="Wrap"
                                                    Padding="4,10,4,0"
-                                                   TextAlignment="Left"/>
+                                                   TextAlignment="Left">
+                                            <Run Text="{Binding SubtitleText}" Foreground="{StaticResource TextPrimary}" FontWeight="SemiBold" />
+                                            <Run Text="{Binding PartialSubtitleText}" Foreground="{StaticResource TextSecondary}" FontStyle="Italic" />
+                                        </TextBlock>
                                         <TextBlock x:Name="AutoWhisperBlock"
                                                    Text="{Binding AutoWhisperHint}"
                                                    Foreground="{StaticResource AccentGold}"
@@ -146,6 +155,16 @@
                                             Orientation="Horizontal"
                                             Margin="4,0,8,0"
                                             VerticalAlignment="Center">
+                                        <StackPanel.Style>
+                                            <Style TargetType="StackPanel">
+                                                <Setter Property="Opacity" Value="0.1"/>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Opacity" Value="1.0"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </StackPanel.Style>
                                         <!-- History toggle -->
                                         <Button Style="{StaticResource BarButton}"
                                                 Content="▼"

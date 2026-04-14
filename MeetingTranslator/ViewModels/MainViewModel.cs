@@ -42,7 +42,14 @@ public partial class MainViewModel : INotifyPropertyChanged, IDisposable
     public string SubtitleText
     {
         get => _subtitleText;
-        set { _subtitleText = value; OnPropertyChanged(); }
+        set { if (_subtitleText == value) return; _subtitleText = value; OnPropertyChanged(); }
+    }
+
+    private string _partialSubtitleText = "";
+    public string PartialSubtitleText
+    {
+        get => _partialSubtitleText;
+        set { if (_partialSubtitleText == value) return; _partialSubtitleText = value; OnPropertyChanged(); }
     }
 
     private string _statusText = "Desconectado";
