@@ -34,11 +34,16 @@ public partial class MainViewModel
             await _dispatcher.InvokeAsync(() =>
             {
                 AzureVoices.Clear();
+                InterpreterVoices.Clear();
                 foreach (var v in list)
+                {
                     AzureVoices.Add(v);
+                    InterpreterVoices.Add(v);
+                }
 
                 // Atualiza view para aplicar filtro atual
                 AzureVoicesView.Refresh();
+                InterpreterVoicesView.Refresh();
 
                 // Auto-select if current voice matches
                 if (!string.IsNullOrWhiteSpace(AzureSpeechVoice))
@@ -46,6 +51,13 @@ public partial class MainViewModel
                     var match = AzureVoices.FirstOrDefault(v => v.ShortName.Equals(AzureSpeechVoice, StringComparison.OrdinalIgnoreCase));
                     if (match != null)
                         SelectedAzureVoice = match;
+                }
+
+                if (!string.IsNullOrWhiteSpace(InterpreterVoiceCode))
+                {
+                    var matchInt = InterpreterVoices.FirstOrDefault(v => v.ShortName.Equals(InterpreterVoiceCode, StringComparison.OrdinalIgnoreCase));
+                    if (matchInt != null)
+                        SelectedInterpreterVoice = matchInt;
                 }
 
                 StatusText = $"Vozes Azure: {AzureVoices.Count}";
@@ -63,7 +75,7 @@ public partial class MainViewModel
 
     public async Task PreviewSelectedAzureVoiceAsync()
     {
-        var voice = SelectedAzureVoice?.ShortName ?? AzureSpeechVoice;
+        var voice = AzureSpeechVoice;
         if (string.IsNullOrWhiteSpace(voice))
         {
             SpeakStatusText = "⚠ Selecione uma voz";
@@ -88,6 +100,45 @@ public partial class MainViewModel
             IsAzureBusy = true;
             await Services.Azure.AzureVoiceCatalogService
                 .PlayPreviewAsync(speechKey!, speechRegion!, voice!)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            SpeakStatusText = $"⚠ Erro na previa: {ex.Message}";
+        }
+        finally
+        {
+            IsAzureBusy = false;
+        }
+    }
+
+    public async Task PreviewInterpreterVoiceAsync()
+    {
+        var voice = InterpreterVoiceCode;
+        if (string.IsNullOrWhiteSpace(voice))
+        {
+            SpeakStatusText = "⚠ Selecione uma voz (Inglês)";
+            return;
+        }
+
+        var speechKey = string.IsNullOrWhiteSpace(AzureSpeechKey)
+            ? Environment.GetEnvironmentVariable("AZURE_SPEECH_KEY")
+            : AzureSpeechKey;
+        var speechRegion = string.IsNullOrWhiteSpace(AzureSpeechRegion)
+            ? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION")
+            : AzureSpeechRegion;
+
+        if (string.IsNullOrWhiteSpace(speechKey) || string.IsNullOrWhiteSpace(speechRegion))
+        {
+            SpeakStatusText = "⚠ Configure AZURE_SPEECH_KEY e AZURE_SPEECH_REGION";
+            return;
+        }
+
+        try
+        {
+            IsAzureBusy = true;
+            await Services.Azure.AzureVoiceCatalogService
+                .PlayPreviewAsync(speechKey!, speechRegion!, voice!, "Hello! This is a quick voice preview.")
                 .ConfigureAwait(false);
         }
         catch (Exception ex)

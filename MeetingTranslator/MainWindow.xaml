@@ -348,6 +348,48 @@
                                                         </CheckBox>
 
                                                         <StackPanel Visibility="{Binding IsSpeakFeatureEnabled, Converter={StaticResource BoolToVis}}">
+                                                                <!-- Voz do intérprete (Inglês) -->
+                                                                <Grid Margin="0,0,0,12">
+                                                                        <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="Auto"/>
+                                                                                <ColumnDefinition Width="*"/>
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock Grid.Column="0"
+                                                                                   Text="💬"
+                                                                                   FontSize="14"
+                                                                                   VerticalAlignment="Center"
+                                                                                   Margin="0,0,8,0"/>
+                                                                        <StackPanel Grid.Column="1">
+                                                                                <TextBlock Text="Voz em Inglês (Azure)"
+                                                                                           Foreground="{StaticResource TextPrimary}"
+                                                                                           FontSize="12"
+                                                                                           FontFamily="Segoe UI"/>
+                                                                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                                                        <TextBox Style="{StaticResource DarkTextBox}"
+                                                                                                 Text="{Binding InterpreterVoiceFilter, UpdateSourceTrigger=PropertyChanged}"
+                                                                                                 Width="80" 
+                                                                                                 Margin="0,0,6,0"
+                                                                                                 ToolTip="Filtro de busca"/>
+                                                                                        <ComboBox ItemsSource="{Binding InterpreterVoicesView}"
+                                                                                                  SelectedValue="{Binding InterpreterVoiceCode, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                                                  SelectedValuePath="ShortName"
+                                                                                                  DisplayMemberPath="DisplayName"
+                                                                                                  Width="150"
+                                                                                                  VerticalAlignment="Center"/>
+                                                                                        <Button Style="{StaticResource BarButton}"
+                                                                                                Content="▶️"
+                                                                                                Click="PreviewInterpreterVoice_Click"
+                                                                                                ToolTip="Ouvir prévia"
+                                                                                                FontSize="12"
+                                                                                                Margin="6,0,0,0"/>
+                                                                                </StackPanel>
+                                                                                <TextBlock Text="{Binding InterpreterVoiceCode}"
+                                                                                           Foreground="{StaticResource TextSecondary}"
+                                                                                           FontSize="10"
+                                                                                           Margin="0,2,0,0"/>
+                                                                        </StackPanel>
+                                                                </Grid>
+
                                                                 <!-- Mic do intérprete -->
                                                                 <Grid Margin="0,0,0,8">
                                                                         <Grid.ColumnDefinitions>

@@ -69,15 +69,16 @@ public partial class MainViewModel
                 var speechRegion = string.IsNullOrWhiteSpace(AzureSpeechRegion)
                     ? Environment.GetEnvironmentVariable("AZURE_SPEECH_REGION")
                     : AzureSpeechRegion;
-                var speechVoice = string.IsNullOrWhiteSpace(AzureSpeechVoice)
-                    ? Environment.GetEnvironmentVariable("AZURE_SPEECH_VOICE")
-                    : AzureSpeechVoice;
+                var interpreterVoice = string.IsNullOrWhiteSpace(InterpreterVoiceCode)
+                    ? "en-US-JennyNeural"
+                    : InterpreterVoiceCode;
+
                 if (string.IsNullOrWhiteSpace(speechKey) || string.IsNullOrWhiteSpace(speechRegion))
                 {
                     SpeakStatusText = "⚠ Configure AZURE_SPEECH_KEY e AZURE_SPEECH_REGION no .env para usar o interprete Azure";
                     return null;
                 }
-                return new AzureSpeechInterpreterService(speechKey, speechRegion, _sharedAudioState, speechVoice);
+                return new AzureSpeechInterpreterService(speechKey, speechRegion, _sharedAudioState, interpreterVoice);
 
             default:
                 SpeakStatusText = "⚠ Provedor de interprete invalido";

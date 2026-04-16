@@ -274,6 +274,11 @@ public partial class MainWindow : Window
         await _vm.PreviewSelectedAzureVoiceAsync();
     }
 
+    private async void PreviewInterpreterVoice_Click(object sender, RoutedEventArgs e)
+    {
+        await _vm.PreviewInterpreterVoiceAsync();
+    }
+
 
     private void ClearHistory_Click(object sender, RoutedEventArgs e)
     {

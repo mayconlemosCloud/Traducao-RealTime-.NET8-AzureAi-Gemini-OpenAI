@@ -281,6 +281,44 @@ public partial class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public ObservableCollection<AzureVoiceInfo> AzureVoices { get; } = new();
     public ICollectionView AzureVoicesView { get; }
+    
+    public ObservableCollection<AzureVoiceInfo> InterpreterVoices { get; } = new();
+    public ICollectionView InterpreterVoicesView { get; }
+
+    private string _interpreterVoiceFilter = string.Empty;
+    public string InterpreterVoiceFilter
+    {
+        get => _interpreterVoiceFilter;
+        set
+        {
+            _interpreterVoiceFilter = value ?? string.Empty;
+            OnPropertyChanged();
+            InterpreterVoicesView.Refresh();
+        }
+    }
+
+    private AzureVoiceInfo? _selectedInterpreterVoice;
+    public AzureVoiceInfo? SelectedInterpreterVoice
+    {
+        get => _selectedInterpreterVoice;
+        set
+        {
+            _selectedInterpreterVoice = value;
+            OnPropertyChanged();
+            if (value != null)
+            {
+                InterpreterVoiceCode = value.ShortName;
+            }
+        }
+    }
+
+    private string _interpreterVoiceCode = "en-US-JennyNeural";
+    public string InterpreterVoiceCode
+    {
+        get => _interpreterVoiceCode;
+        set { _interpreterVoiceCode = value; OnPropertyChanged(); }
+    }
+
 
     private string _azureVoiceFilter = string.Empty;
     public string AzureVoiceFilter
@@ -450,8 +488,25 @@ public partial class MainViewModel : INotifyPropertyChanged, IDisposable
                    || Norm(v.Gender).Contains(f);
         };
 
-        // Carrega vozes do Azure automaticamente focando em pt-BR (usando .env)
-        _ = Task.Run(() => LoadAzureVoicesAsync("pt-BR"));
+        // View filtrável para vozes de Saída do Intérprete (apenas Inglês)
+        InterpreterVoicesView = CollectionViewSource.GetDefaultView(InterpreterVoices);
+        InterpreterVoicesView.Filter = o =>
+        {
+            if (o is not AzureVoiceInfo v) return false;
+            // Filtra estritamente para o locale em inglês
+            if (!v.Locale.StartsWith("en", StringComparison.OrdinalIgnoreCase)) return false;
+
+            if (string.IsNullOrWhiteSpace(_interpreterVoiceFilter)) return true;
+            string Norm(string s) => new string((s ?? "").Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+            var f = Norm(_interpreterVoiceFilter);
+            return Norm(v.ShortName).Contains(f)
+                   || Norm(v.LocalName).Contains(f)
+                   || Norm(v.Locale).Contains(f)
+                   || Norm(v.Gender).Contains(f);
+        };
+
+        // Carrega todas as vozes do Azure automaticamente para preencher Entrada e Intérprete
+        _ = Task.Run(() => LoadAzureVoicesAsync(null));
         
         InitializeAnalysisCommands();
     }
